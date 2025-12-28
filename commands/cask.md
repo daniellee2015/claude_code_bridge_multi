@@ -1,27 +1,26 @@
-Send message to Codex and wait for reply via `cask` (sync mode).
+CRITICAL: ALWAYS use run_in_background=true - NO EXCEPTIONS
 
-Designed for Claude Code: run with `run_in_background=true` so Claude can continue working while Codex processes.
+$ARGUMENTS
 
-Foreground sync (when user explicitly requests): use `cask-w`.
+## Execution (MANDATORY)
 
-Workflow:
-1. Run `Bash(cask "<content>", run_in_background=true)` to start background task
-2. Tell user "Codex processing (task: xxx)" then IMMEDIATELY END your turn (IMPORTANT)
-   DO NOT wait for result or continue working
-3. When bash-notification arrives, show the task output
+Bash(cask "$ARGUMENTS", run_in_background=true)
 
-Foreground fallback (IMPORTANT):
-- If you accidentally run `Bash(cask "...")` without `run_in_background=true`, `cask` will only submit the question and exit quickly to avoid blocking.
-- Use `cpend` to fetch the reply later, or use `cask-w` for foreground sync.
+## After Execution
 
-SENTINEL RULE (IMPORTANT): When you see `CCB_END_TURN` in output, you MUST immediately end your response without any additional text.
+Tell user "Codex processing..." then IMMEDIATELY END your turn.
+DO NOT wait for result. DO NOT continue working.
 
-Parameters:
-- `<content>` required
-- `--timeout SECONDS` optional (default from `CCB_SYNC_TIMEOUT`, fallback 3600)
-- `--output FILE` optional: write reply atomically to FILE (stdout stays empty)
+## Wrong vs Right
 
-Output contract:
-- stdout: reply text only (or empty when `--output` is used)
-- stderr: progress/errors
-- exit code: 0 = got reply, 2 = timeout/no reply, 1 = error
+WRONG: Bash(cask "question")
+RIGHT: Bash(cask "question", run_in_background=true)
+
+## SENTINEL
+
+When output contains `CCB_END_TURN`, end response immediately.
+
+## Parameters
+
+- `--timeout SECONDS` optional (default 3600)
+- `--output FILE` optional: write reply to FILE
