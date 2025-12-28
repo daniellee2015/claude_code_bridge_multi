@@ -7,6 +7,7 @@ If --output is provided, the reply is written atomically to that file and stdout
 """
 from __future__ import annotations
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
@@ -22,30 +23,32 @@ def _usage() -> None:
 
 
 def _check_background_mode() -> bool:
-    """Check if running in background mode (non-interactive stdout)."""
-    # Allow explicit override
-    if os.environ.get("CCB_ALLOW_FOREGROUND") in ("1", "true", "yes"):
-        return True
-    # If not running inside Claude Code, allow normal CLI usage.
+    """Return True when stdout looks like Claude Code run_in_background output capture."""
     if os.environ.get("CLAUDECODE") != "1":
         return True
-
-    # In Claude Code, require non-interactive stdout (file/pipe) to avoid blocking the turn.
+    if os.environ.get("CCB_ALLOW_FOREGROUND") in ("1", "true", "yes"):
+        return True
+    # Claude Code's run_in_background typically captures stdout into a file.
     try:
-        if not sys.stdout.isatty():
-            return True
         import stat
         mode = os.fstat(sys.stdout.fileno()).st_mode
-        if stat.S_ISREG(mode):  # stdout is a regular file = background mode
-            return True
+        return stat.S_ISREG(mode)
     except Exception:
-        pass
+        return False
 
-    print("[ERROR] cask must run with run_in_background=true in Claude Code", file=sys.stderr)
-    print('Use: Bash(cask "...", run_in_background=true)', file=sys.stderr)
-    print('Or use foreground sync: Bash(cask-w "...")', file=sys.stderr)
-    print("Override (debug only): CCB_ALLOW_FOREGROUND=1", file=sys.stderr)
-    return False
+
+def _popen_detached(argv: list[str]) -> None:
+    kwargs = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if os.name == "nt":
+        kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    else:
+        kwargs["start_new_session"] = True
+    subprocess.Popen(argv, **kwargs)
 
 
 def _parse_args(argv: list[str]) -> Tuple[Optional[Path], float, str, bool]:
@@ -92,10 +95,6 @@ def main(argv: list[str]) -> int:
         _usage()
         return 1
 
-    # Check background mode before doing anything
-    if not _check_background_mode():
-        return 1
-
     try:
         from cli_output import EXIT_ERROR, EXIT_NO_REPLY, EXIT_OK, atomic_write_text
         from codex_comm import CodexCommunicator
@@ -104,6 +103,21 @@ def main(argv: list[str]) -> int:
         if not message:
             _usage()
             return EXIT_ERROR
+
+        # Claude Code foreground fallback: avoid blocking the tool call if run_in_background was forgotten.
+        if os.environ.get("CLAUDECODE") == "1" and not _check_background_mode():
+            if output_path:
+                cask_w = script_dir / "cask-w"
+                cmd = [sys.executable, str(cask_w), "--timeout", str(timeout), "--output", str(output_path), message]
+                _popen_detached(cmd)
+            else:
+                comm = CodexCommunicator(lazy_init=True)
+                healthy, status = comm._check_session_health_impl(probe_terminal=False)
+                if not healthy:
+                    raise RuntimeError(f"[ERROR] Session error: {status}")
+                comm._send_message(message)
+            print("CCB_END_TURN", file=sys.stderr)
+            return EXIT_OK
 
         comm = CodexCommunicator(lazy_init=True)
 

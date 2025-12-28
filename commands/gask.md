@@ -10,6 +10,10 @@ Workflow:
    DO NOT wait for result or continue working
 3. When bash-notification arrives, show the task output
 
+Foreground fallback (IMPORTANT):
+- If you accidentally run `Bash(gask "...")` without `run_in_background=true`, `gask` will only submit the question and exit quickly to avoid blocking.
+- Use `gpend` to fetch the reply later, or use `gask-w` for foreground sync.
+
 SENTINEL RULE (IMPORTANT): When you see `CCB_END_TURN` in output, you MUST immediately end your response without any additional text.
 
 Parameters:

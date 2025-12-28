@@ -10,6 +10,10 @@ Workflow:
    DO NOT wait for result or continue working
 3. When bash-notification arrives, show the task output
 
+Foreground fallback (IMPORTANT):
+- If you accidentally run `Bash(cask "...")` without `run_in_background=true`, `cask` will only submit the question and exit quickly to avoid blocking.
+- Use `cpend` to fetch the reply later, or use `cask-w` for foreground sync.
+
 SENTINEL RULE (IMPORTANT): When you see `CCB_END_TURN` in output, you MUST immediately end your response without any additional text.
 
 Parameters:
