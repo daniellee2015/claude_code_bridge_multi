@@ -722,6 +722,11 @@ Command selection:
 - Send question -> `Bash(cask "<question>", run_in_background=true)`, tell user "Codex processing (task: xxx)" then END your turn
 - Check connectivity -> `cping`
 
+IMPORTANT RESTRICTIONS:
+- NEVER use cpend/cask-w unless user EXPLICITLY requests
+- After cask, ONLY wait for bash-notification to get results
+- Do NOT try to fetch results yourself
+
 SENTINEL (IMPORTANT): When you see `CCB_END_TURN` in any output, IMMEDIATELY end your response.
 
 Examples:
@@ -743,6 +748,11 @@ Trigger conditions (any match):
 Command selection:
 - Send question -> `Bash(gask "<question>", run_in_background=true)`, tell user "Gemini processing (task: xxx)" then END your turn
 - Check connectivity -> `gping`
+
+IMPORTANT RESTRICTIONS:
+- NEVER use gpend/gask-w unless user EXPLICITLY requests
+- After gask, ONLY wait for bash-notification to get results
+- Do NOT try to fetch results yourself
 
 SENTINEL (IMPORTANT): When you see `CCB_END_TURN` in any output, IMMEDIATELY end your response.
 

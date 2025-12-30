@@ -1,18 +1,12 @@
-Send message to Codex and wait for reply via `cask-w` (foreground sync).
+WARNING: Only use when user EXPLICITLY requests sync/foreground mode.
+Do NOT use as alternative to cask.
 
-Execution:
-- Run `Bash(cask-w "<content>")` and wait until it returns
+Send message to Codex via `cask-w` (foreground sync).
+
+Execution: `Bash(cask-w "<content>")`
 
 Parameters:
 - `<content>` required
-- `--timeout SECONDS` optional (default from `CCB_SYNC_TIMEOUT`, fallback 3600)
-- `--output FILE` optional: write reply atomically to FILE (stdout still prints the reply)
+- `--timeout SECONDS` optional
 
-Output contract:
-- stdout: reply text only
-- stderr: progress/errors
-- exit code: 0 = got reply, 2 = timeout/no reply, 1 = error
-
-Hints:
-- Use `cask` with `run_in_background=true` for background waiting
-- Use `/cpend` to view the latest reply from official logs
+Output: stdout = reply, exit code 0 = success
