@@ -1,6 +1,6 @@
 <div align="center">
 
-# Claude Code Bridge (ccb) v2.3
+# Claude Code Bridge (ccb) v2.3.1
 
 **Silky Smooth Claude & Codex & Gemini Collaboration via Split-Pane Terminal**
 
@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/Every_Model_Controllable-CF1322?style=for-the-badge" alt="Every Model Controllable">
 </p>
 
-[![Version](https://img.shields.io/badge/version-2.3-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-2.3.1-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
@@ -292,3 +292,13 @@ Once started, collaborate naturally. Claude will detect when to delegate tasks.
 <img src="assets/weixin.png" alt="WeChat Group" width="300">
 
 </div>
+
+---
+
+<details>
+<summary><b>Version History</b></summary>
+
+### v2.3.1
+- Fix race condition in gask/cask: pre-check for existing messages before wait loop
+
+</details>
