@@ -341,19 +341,22 @@ class AILauncher:
                 except StopIteration:
                     parent_pane = None
 
+        pane_title_marker = f"CCB-{provider}-{self.session_id[:12]}"
+        title_cmd = f"printf '\\033]0;{pane_title_marker}\\007'; "
+        full_cmd = title_cmd + start_cmd
         backend = WeztermBackend()
-        pane_id = backend.create_pane(start_cmd, str(Path.cwd()), direction=direction, percent=50, parent_pane=parent_pane)
+        pane_id = backend.create_pane(full_cmd, str(Path.cwd()), direction=direction, percent=50, parent_pane=parent_pane)
         self.wezterm_panes[provider] = pane_id
 
         if provider == "codex":
             input_fifo = runtime / "input.fifo"
             output_fifo = runtime / "output.fifo"
             # WezTerm mode injects text via pane, no strong FIFO dependency; Windows/WSL may not support mkfifo
-            self._write_codex_session(runtime, None, input_fifo, output_fifo, pane_id=pane_id)
+            self._write_codex_session(runtime, None, input_fifo, output_fifo, pane_id=pane_id, pane_title_marker=pane_title_marker)
         elif provider == "gemini":
-            self._write_gemini_session(runtime, None, pane_id=pane_id)
+            self._write_gemini_session(runtime, None, pane_id=pane_id, pane_title_marker=pane_title_marker)
         else:
-            self._write_opencode_session(runtime, None, pane_id=pane_id)
+            self._write_opencode_session(runtime, None, pane_id=pane_id, pane_title_marker=pane_title_marker)
 
         print(f"✅ {t('started_backend', provider=provider.capitalize(), terminal='wezterm pane', pane_id=pane_id)}")
         return True
@@ -858,7 +861,7 @@ exec tmux attach -t "$TMUX_SESSION"
         print(f"✅ {t('started_backend', provider='OpenCode', terminal='tmux', pane_id=tmux_session)}")
         return True
 
-    def _write_codex_session(self, runtime, tmux_session, input_fifo, output_fifo, pane_id=None):
+    def _write_codex_session(self, runtime, tmux_session, input_fifo, output_fifo, pane_id=None, pane_title_marker=None):
         session_file = Path.cwd() / ".codex-session"
 
         # Pre-check permissions
@@ -881,6 +884,7 @@ exec tmux attach -t "$TMUX_SESSION"
             "terminal": self.terminal_type,
             "tmux_session": tmux_session,
             "pane_id": pane_id,
+            "pane_title_marker": pane_title_marker,
             "tmux_log": str(runtime / "bridge_output.log"),
             "work_dir": str(work_dir),
             "work_dir_norm": _normalize_path_for_match(str(work_dir)),
@@ -894,7 +898,7 @@ exec tmux attach -t "$TMUX_SESSION"
             return False
         return True
 
-    def _write_gemini_session(self, runtime, tmux_session, pane_id=None):
+    def _write_gemini_session(self, runtime, tmux_session, pane_id=None, pane_title_marker=None):
         session_file = Path.cwd() / ".gemini-session"
 
         # Pre-check permissions
@@ -910,6 +914,7 @@ exec tmux attach -t "$TMUX_SESSION"
             "terminal": self.terminal_type,
             "tmux_session": tmux_session,
             "pane_id": pane_id,
+            "pane_title_marker": pane_title_marker,
             "work_dir": str(Path.cwd()),
             "active": True,
             "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -921,7 +926,7 @@ exec tmux attach -t "$TMUX_SESSION"
             return False
         return True
 
-    def _write_opencode_session(self, runtime, tmux_session, pane_id=None):
+    def _write_opencode_session(self, runtime, tmux_session, pane_id=None, pane_title_marker=None):
         session_file = Path.cwd() / ".opencode-session"
 
         writable, reason, fix = check_session_writable(session_file)
@@ -936,6 +941,7 @@ exec tmux attach -t "$TMUX_SESSION"
             "terminal": self.terminal_type,
             "tmux_session": tmux_session,
             "pane_id": pane_id,
+            "pane_title_marker": pane_title_marker,
             "work_dir": str(Path.cwd()),
             "active": True,
             "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),

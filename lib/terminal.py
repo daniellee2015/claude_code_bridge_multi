@@ -312,6 +312,7 @@ class Iterm2Backend(TerminalBackend):
 
 class WeztermBackend(TerminalBackend):
     _wezterm_bin: Optional[str] = None
+    CCB_TITLE_MARKER = "CCB"
 
     @classmethod
     def _cli_base_args(cls) -> list[str]:
@@ -392,15 +393,44 @@ class WeztermBackend(TerminalBackend):
 
         self._send_enter(pane_id)
 
-    def is_alive(self, pane_id: str) -> bool:
+    def _list_panes(self) -> list[dict]:
         try:
-            result = subprocess.run([*self._cli_base_args(), "list", "--format", "json"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            result = subprocess.run(
+                [*self._cli_base_args(), "list", "--format", "json"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
             if result.returncode != 0:
-                return False
+                return []
             panes = json.loads(result.stdout)
-            return any(str(p.get("pane_id")) == str(pane_id) for p in panes)
+            return panes if isinstance(panes, list) else []
         except Exception:
+            return []
+
+    def _pane_id_by_title_marker(self, panes: list[dict], marker: str) -> Optional[str]:
+        if not marker:
+            return None
+        for pane in panes:
+            title = pane.get("title") or ""
+            if marker in title:
+                pane_id = pane.get("pane_id")
+                if pane_id is not None:
+                    return str(pane_id)
+        return None
+
+    def find_pane_by_title_marker(self, marker: str) -> Optional[str]:
+        panes = self._list_panes()
+        return self._pane_id_by_title_marker(panes, marker)
+
+    def is_alive(self, pane_id: str) -> bool:
+        panes = self._list_panes()
+        if not panes:
             return False
+        if any(str(p.get("pane_id")) == str(pane_id) for p in panes):
+            return True
+        return self._pane_id_by_title_marker(panes, pane_id) is not None
 
     def kill_pane(self, pane_id: str) -> None:
         subprocess.run([*self._cli_base_args(), "kill-pane", "--pane-id", pane_id], stderr=subprocess.DEVNULL)

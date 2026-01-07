@@ -398,7 +398,7 @@ class CodexLogReader:
 
         if entry_type == "event_msg":
             payload_type = payload.get("type")
-            if payload_type in ("assistant_message", "assistant", "assistant_response", "message"):
+            if payload_type in ("agent_message", "assistant_message", "assistant", "assistant_response", "message"):
                 if payload.get("role") == "user":
                     return None
                 msg = payload.get("message") or payload.get("content") or payload.get("text")
@@ -490,6 +490,7 @@ class CodexCommunicator:
         self.input_fifo = Path(self.session_info["input_fifo"])
         self.terminal = self.session_info.get("terminal", os.environ.get("CODEX_TERMINAL", "tmux"))
         self.pane_id = get_pane_id_from_session(self.session_info) or ""
+        self.pane_title_marker = self.session_info.get("pane_title_marker") or ""
         self.backend = get_backend_for_session(self.session_info)
 
         self.timeout = int(os.environ.get("CODEX_SYNC_TIMEOUT", "30"))
@@ -499,6 +500,12 @@ class CodexCommunicator:
         # Lazy initialization: defer log reader and health check
         self._log_reader: Optional[CodexLogReader] = None
         self._log_reader_primed = False
+        if self.terminal == "wezterm" and self.backend and self.pane_title_marker:
+            resolver = getattr(self.backend, "find_pane_by_title_marker", None)
+            if callable(resolver):
+                resolved = resolver(self.pane_title_marker)
+                if resolved:
+                    self.pane_id = resolved
 
         if not lazy_init:
             self._ensure_log_reader()
@@ -524,6 +531,15 @@ class CodexCommunicator:
             self._prime_log_binding()
             self._log_reader_primed = True
 
+    def _find_session_file(self) -> Optional[Path]:
+        current = Path.cwd()
+        while current != current.parent:
+            candidate = current / ".codex-session"
+            if candidate.exists():
+                return candidate
+            current = current.parent
+        return None
+
     def _load_session_info(self):
         if "CODEX_SESSION_ID" in os.environ:
             terminal = os.environ.get("CODEX_TERMINAL", "tmux")
@@ -534,7 +550,7 @@ class CodexCommunicator:
                 pane_id = os.environ.get("CODEX_ITERM2_PANE", "")
             else:
                 pane_id = ""
-            return {
+            result = {
                 "session_id": os.environ["CODEX_SESSION_ID"],
                 "runtime_dir": os.environ["CODEX_RUNTIME_DIR"],
                 "input_fifo": os.environ["CODEX_INPUT_FIFO"],
@@ -544,9 +560,21 @@ class CodexCommunicator:
                 "pane_id": pane_id,
                 "_session_file": None,
             }
+            session_file = self._find_session_file()
+            if session_file:
+                try:
+                    with open(session_file, "r", encoding="utf-8-sig") as f:
+                        file_data = json.load(f)
+                    if isinstance(file_data, dict):
+                        result["codex_session_path"] = file_data.get("codex_session_path")
+                        result["codex_session_id"] = file_data.get("codex_session_id")
+                        result["_session_file"] = str(session_file)
+                except Exception:
+                    pass
+            return result
 
-        project_session = Path.cwd() / ".codex-session"
-        if not project_session.exists():
+        project_session = self._find_session_file()
+        if not project_session:
             return None
 
         try:
@@ -589,6 +617,12 @@ class CodexCommunicator:
             if self.terminal in ("wezterm", "iterm2"):
                 if not self.pane_id:
                     return False, f"{self.terminal} pane_id not found"
+                if self.terminal == "wezterm" and self.backend and self.pane_title_marker:
+                    resolver = getattr(self.backend, "find_pane_by_title_marker", None)
+                    if callable(resolver) and (not self.backend.is_alive(self.pane_id)):
+                        resolved = resolver(self.pane_title_marker)
+                        if resolved:
+                            self.pane_id = resolved
                 if probe_terminal and (not self.backend or not self.backend.is_alive(self.pane_id)):
                     return False, f"{self.terminal} pane does not exist: {self.pane_id}"
                 return True, "Session healthy"

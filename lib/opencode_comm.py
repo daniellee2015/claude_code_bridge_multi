@@ -704,6 +704,15 @@ class OpenCodeCommunicator:
             if not healthy:
                 raise RuntimeError(f"❌ Session unhealthy: {msg}\nTip: Run 'ccb up opencode' to start a new session")
 
+    def _find_session_file(self) -> Optional[Path]:
+        current = Path.cwd()
+        while current != current.parent:
+            candidate = current / ".opencode-session"
+            if candidate.exists():
+                return candidate
+            current = current.parent
+        return None
+
     def _load_session_info(self) -> Optional[dict]:
         if "OPENCODE_SESSION_ID" in os.environ:
             terminal = os.environ.get("OPENCODE_TERMINAL", "tmux")
@@ -713,7 +722,7 @@ class OpenCodeCommunicator:
                 pane_id = os.environ.get("OPENCODE_ITERM2_PANE", "")
             else:
                 pane_id = ""
-            return {
+            result = {
                 "session_id": os.environ["OPENCODE_SESSION_ID"],
                 "runtime_dir": os.environ["OPENCODE_RUNTIME_DIR"],
                 "terminal": terminal,
@@ -721,9 +730,20 @@ class OpenCodeCommunicator:
                 "pane_id": pane_id,
                 "_session_file": None,
             }
+            session_file = self._find_session_file()
+            if session_file:
+                try:
+                    with session_file.open("r", encoding="utf-8-sig") as handle:
+                        file_data = json.load(handle)
+                    if isinstance(file_data, dict):
+                        result["opencode_session_path"] = file_data.get("opencode_session_path")
+                        result["_session_file"] = str(session_file)
+                except Exception:
+                    pass
+            return result
 
-        project_session = Path.cwd() / ".opencode-session"
-        if not project_session.exists():
+        project_session = self._find_session_file()
+        if not project_session:
             return None
 
         try:

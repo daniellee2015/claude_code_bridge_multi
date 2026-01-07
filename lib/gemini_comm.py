@@ -104,17 +104,28 @@ class GeminiLogReader:
 
     def _latest_session(self) -> Optional[Path]:
         preferred = self._preferred_session
-        # If preferred exists and is valid, use it directly (avoid scanning)
+        # Always scan to find the latest session by mtime
+        scanned = self._scan_latest_session()
+
+        # Compare preferred vs scanned by mtime - use whichever is newer
         if preferred and preferred.exists():
+            if scanned and scanned.exists():
+                try:
+                    pref_mtime = preferred.stat().st_mtime
+                    scan_mtime = scanned.stat().st_mtime
+                    if scan_mtime > pref_mtime:
+                        self._debug(f"Scanned session newer: {scanned} ({scan_mtime}) > {preferred} ({pref_mtime})")
+                        self._preferred_session = scanned
+                        return scanned
+                except OSError:
+                    pass
             self._debug(f"Using preferred session: {preferred}")
             return preferred
-        # Only scan when no preferred or preferred is invalid
-        self._debug("No valid preferred session, scanning...")
-        latest = self._scan_latest_session()
-        if latest:
-            self._preferred_session = latest
-            self._debug(f"Scan found: {latest}")
-            return latest
+
+        if scanned:
+            self._preferred_session = scanned
+            self._debug(f"Scan found: {scanned}")
+            return scanned
         # Fallback: Windows/WSL path hash mismatch can cause per-project scan to miss sessions.
         if os.environ.get("GEMINI_DISABLE_ANY_PROJECT_SCAN") not in ("1", "true", "yes"):
             any_latest = self._scan_latest_session_any_project()
@@ -538,6 +549,15 @@ class GeminiCommunicator:
             self._prime_log_binding()
             self._log_reader_primed = True
 
+    def _find_session_file(self) -> Optional[Path]:
+        current = Path.cwd()
+        while current != current.parent:
+            candidate = current / ".gemini-session"
+            if candidate.exists():
+                return candidate
+            current = current.parent
+        return None
+
     def _prime_log_binding(self) -> None:
         session_path = self.log_reader.current_session_path()
         if not session_path:
@@ -554,7 +574,7 @@ class GeminiCommunicator:
                 pane_id = os.environ.get("GEMINI_ITERM2_PANE", "")
             else:
                 pane_id = ""
-            return {
+            result = {
                 "session_id": os.environ["GEMINI_SESSION_ID"],
                 "runtime_dir": os.environ["GEMINI_RUNTIME_DIR"],
                 "terminal": terminal,
@@ -562,9 +582,20 @@ class GeminiCommunicator:
                 "pane_id": pane_id,
                 "_session_file": None,
             }
+            session_file = self._find_session_file()
+            if session_file:
+                try:
+                    with open(session_file, "r", encoding="utf-8") as f:
+                        file_data = json.load(f)
+                    if isinstance(file_data, dict):
+                        result["gemini_session_path"] = file_data.get("gemini_session_path")
+                        result["_session_file"] = str(session_file)
+                except Exception:
+                    pass
+            return result
 
-        project_session = Path.cwd() / ".gemini-session"
-        if not project_session.exists():
+        project_session = self._find_session_file()
+        if not project_session:
             return None
 
         try:
