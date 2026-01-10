@@ -439,7 +439,7 @@ class WeztermBackend(TerminalBackend):
             return None
         for pane in panes:
             title = pane.get("title") or ""
-            if marker in title:
+            if title.startswith(marker):
                 pane_id = pane.get("pane_id")
                 if pane_id is not None:
                     return str(pane_id)

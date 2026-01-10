@@ -442,7 +442,7 @@ class AILauncher:
                 except StopIteration:
                     parent_pane = None
 
-        pane_title_marker = f"CCB-{provider}-{self.session_id[:12]}"
+        pane_title_marker = f"CCB-{provider}-{self.session_id}"
         title_cmd = _build_pane_title_cmd(pane_title_marker)
         full_cmd = title_cmd + start_cmd
         backend = WeztermBackend()
