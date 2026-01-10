@@ -28,20 +28,24 @@ def is_windows() -> bool:
     return platform.system() == "Windows"
 
 
-def _get_subprocess_kwargs():
-    """Get subprocess kwargs with hidden window on Windows."""
-    kwargs = {}
+def _subprocess_kwargs() -> dict:
+    """
+    返回适合当前平台的subprocess参数，避免Windows上创建可见窗口
+
+    在Windows上使用CREATE_NO_WINDOW标志，确保subprocess调用不会弹出CMD窗口。
+    注意：不使用DETACHED_PROCESS，以保留控制台继承能力。
+    """
     if os.name == "nt":
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = subprocess.SW_HIDE
-        kwargs["startupinfo"] = startupinfo
-    return kwargs
+        # CREATE_NO_WINDOW (0x08000000): 创建无窗口的进程
+        # 这允许子进程继承父进程的隐藏控制台，而不是创建新的可见窗口
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        return {"creationflags": flags}
+    return {}
 
 
 def _run(*args, **kwargs):
     """Wrapper for subprocess.run that adds hidden window on Windows."""
-    kwargs.update(_get_subprocess_kwargs())
+    kwargs.update(_subprocess_kwargs())
     import subprocess as _sp
     return _sp.run(*args, **kwargs)
 

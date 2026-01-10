@@ -22,6 +22,7 @@ sys.path.insert(0, str(lib_dir))
 from compat import setup_windows_encoding
 setup_windows_encoding()
 from process_lock import ProviderLock
+from terminal import _subprocess_kwargs
 
 COMPLETION_MARKER = (os.environ.get("CCB_EXECUTION_COMPLETE_MARKER") or "EXECUTION_COMPLETE").strip() or "EXECUTION_COMPLETE"
 
@@ -303,14 +304,8 @@ def _maybe_start_caskd() -> bool:
         argv = [python_exe, entry]
     try:
         kwargs = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
-        if os.name == "nt":
-            # Use STARTUPINFO to hide the console window on Windows
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
-            kwargs["startupinfo"] = startupinfo
-            kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        else:
+        kwargs.update(_subprocess_kwargs())
+        if os.name != "nt":
             kwargs["start_new_session"] = True
         subprocess.Popen(argv, **kwargs)
         return True
@@ -359,14 +354,8 @@ def _popen_detached(argv: list[str]) -> None:
         "stderr": subprocess.DEVNULL,
         "close_fds": True,
     }
-    if os.name == "nt":
-        # Use STARTUPINFO to hide the console window on Windows
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = subprocess.SW_HIDE
-        kwargs["startupinfo"] = startupinfo
-        kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    else:
+    kwargs.update(_subprocess_kwargs())
+    if os.name != "nt":
         kwargs["start_new_session"] = True
     subprocess.Popen(argv, **kwargs)
 

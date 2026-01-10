@@ -30,6 +30,17 @@ SESSION_ID_PATTERN = re.compile(
 )
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value
+
+
 class CodexLogReader:
     """Reads Codex official logs from ~/.codex/sessions"""
 
@@ -624,6 +635,8 @@ class CodexCommunicator:
         self.timeout = int(os.environ.get("CODEX_SYNC_TIMEOUT", "30"))
         self.marker_prefix = "ask"
         self.project_session_file = self.session_info.get("_session_file")
+        self._pane_health_cache: Optional[Tuple[float, bool]] = None
+        self._pane_health_ttl = max(0.0, _env_float("CCB_CODEX_PANE_HEALTH_TTL", 1.0))
 
         # Lazy initialization: defer log reader and health check
         self._log_reader: Optional[CodexLogReader] = None
@@ -753,13 +766,16 @@ class CodexCommunicator:
             if self.terminal in ("wezterm", "iterm2"):
                 if not self.pane_id:
                     return False, f"{self.terminal} pane_id not found"
+                pane_alive = self._pane_alive(force=False)
                 if self.terminal == "wezterm" and self.backend and self.pane_title_marker:
                     resolver = getattr(self.backend, "find_pane_by_title_marker", None)
-                    if callable(resolver) and (not self.backend.is_alive(self.pane_id)):
+                    if callable(resolver) and (not pane_alive):
                         resolved = resolver(self.pane_title_marker)
                         if resolved:
                             self.pane_id = resolved
-                if probe_terminal and (not self.backend or not self.backend.is_alive(self.pane_id)):
+                            self._invalidate_pane_health_cache()
+                            pane_alive = self._pane_alive(force=True)
+                if probe_terminal and not pane_alive:
                     return False, f"{self.terminal} pane does not exist: {self.pane_id}"
                 return True, "Session healthy"
 
@@ -794,6 +810,25 @@ class CodexCommunicator:
             return True, "Session healthy"
         except Exception as exc:
             return False, f"Health check failed: {exc}"
+
+    def _invalidate_pane_health_cache(self) -> None:
+        self._pane_health_cache = None
+
+    def _pane_alive(self, *, force: bool) -> bool:
+        ttl = self._pane_health_ttl
+        now = time.time()
+        if (not force) and ttl > 0 and self._pane_health_cache:
+            cached_ts, cached_val = self._pane_health_cache
+            if now - cached_ts < ttl:
+                return cached_val
+        backend = self.backend
+        pane_id = self.pane_id
+        alive = bool(backend and pane_id and backend.is_alive(pane_id))
+        if ttl > 0:
+            self._pane_health_cache = (now, alive)
+        else:
+            self._pane_health_cache = None
+        return alive
 
     def _send_via_terminal(self, content: str) -> None:
         if not self.backend or not self.pane_id:
