@@ -23,6 +23,7 @@ from caskd_protocol import (
     wrap_codex_prompt,
 )
 from caskd_session import CodexProjectSession, compute_session_key, find_project_session_file, load_project_session
+from terminal import is_windows
 from codex_comm import CodexLogReader, CodexCommunicator
 from process_lock import ProviderLock
 from session_utils import safe_write_session
@@ -215,7 +216,9 @@ class _SessionWorker(threading.Thread):
         saw_any_event = False
         tail_bytes = int(os.environ.get("CCB_CASKD_REBIND_TAIL_BYTES", str(1024 * 1024 * 2)) or (1024 * 1024 * 2))
         last_pane_check = time.time()
-        pane_check_interval = float(os.environ.get("CCB_CASKD_PANE_CHECK_INTERVAL", "2.0") or "2.0")
+        # Windows平台降低检查频率，减少CLI调用和窗口闪烁风险
+        default_interval = "5.0" if is_windows() else "2.0"
+        pane_check_interval = float(os.environ.get("CCB_CASKD_PANE_CHECK_INTERVAL", default_interval) or default_interval)
 
         while True:
             remaining = deadline - time.time()

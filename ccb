@@ -286,7 +286,10 @@ class AILauncher:
             "close_fds": True,
         }
         if os.name == "nt":
-            kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            # 使用 CREATE_NO_WINDOW 而非 DETACHED_PROCESS
+            # CREATE_NO_WINDOW: 隐藏窗口但保留控制台附着，子进程可继承
+            # DETACHED_PROCESS: 完全脱离控制台，子进程必须创建新窗口
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
         else:
             kwargs["start_new_session"] = True
 
