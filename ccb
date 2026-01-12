@@ -216,6 +216,279 @@ def _build_export_path_cmd(bin_dir: Path) -> str:
     return f"export PATH={shlex.quote(bin_s)}{os.pathsep}$PATH; "
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    v = raw.strip().lower()
+    if v in {"1", "true", "yes", "on"}:
+        return True
+    if v in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except Exception:
+        return default
+
+
+def _cleanup_tmpclaude_artifacts() -> int:
+    """
+    Best-effort cleanup for leftover Claude temp markers like `tmpclaude-xxxx-cwd`.
+
+    Deletion is conservative: only removes entries older than `CCB_TMPCLAUDE_MIN_AGE_S`.
+    Controls:
+      - `CCB_TMPCLAUDE_CLEAN` (default: true)
+      - `CCB_TMPCLAUDE_CLEAN_CWD` (default: true)
+      - `CCB_TMPCLAUDE_MIN_AGE_S` (default: 300)
+      - `CCB_TMPCLAUDE_DIRS` (extra dirs, split by `os.pathsep`)
+      - `CCB_TMPCLAUDE_PATTERNS` (comma-separated globs; default: tmpclaude-*-cwd)
+    """
+    if not _env_bool("CCB_TMPCLAUDE_CLEAN", True):
+        return 0
+
+    patterns_raw = (os.environ.get("CCB_TMPCLAUDE_PATTERNS") or "").strip()
+    patterns = [p.strip() for p in patterns_raw.split(",") if p.strip()] if patterns_raw else ["tmpclaude-*-cwd"]
+
+    min_age_s = max(0.0, float(_env_float("CCB_TMPCLAUDE_MIN_AGE_S", 300.0)))
+
+    dirs: list[Path] = []
+    if _env_bool("CCB_TMPCLAUDE_CLEAN_CWD", True):
+        dirs.append(Path.cwd())
+    try:
+        dirs.append(Path(tempfile.gettempdir()))
+    except Exception:
+        pass
+
+    extra = (os.environ.get("CCB_TMPCLAUDE_DIRS") or "").strip()
+    if extra:
+        for part in extra.split(os.pathsep):
+            p = part.strip()
+            if not p:
+                continue
+            try:
+                dirs.append(Path(p).expanduser())
+            except Exception:
+                continue
+
+    seen_dirs: set[str] = set()
+    unique_dirs: list[Path] = []
+    for d in dirs:
+        key = str(d)
+        if key in seen_dirs:
+            continue
+        seen_dirs.add(key)
+        unique_dirs.append(d)
+
+    now = time.time()
+    removed = 0
+    for base in unique_dirs:
+        try:
+            if not base.exists() or not base.is_dir():
+                continue
+        except Exception:
+            continue
+        for pat in patterns:
+            try:
+                candidates = list(base.glob(pat))
+            except Exception:
+                candidates = []
+            for path in candidates:
+                try:
+                    st = path.stat()
+                    if min_age_s and (now - float(st.st_mtime)) < min_age_s:
+                        continue
+                    if path.is_dir():
+                        shutil.rmtree(path, ignore_errors=True)
+                    else:
+                        path.unlink(missing_ok=True)
+                    removed += 1
+                except Exception:
+                    continue
+    return removed
+
+
+def _is_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            kernel32 = ctypes.windll.kernel32
+            SYNCHRONIZE = 0x00100000
+            handle = kernel32.OpenProcess(SYNCHRONIZE, False, int(pid))
+            if handle:
+                kernel32.CloseHandle(handle)
+                return True
+            return False
+        except Exception:
+            return True
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except Exception:
+        return False
+
+
+def _runtime_base_dir() -> Path:
+    try:
+        base = Path(tempfile.gettempdir())
+    except Exception:
+        base = Path("/tmp")
+    return base / f"claude-ai-{getpass.getuser()}"
+
+
+def _cleanup_stale_runtime_dirs(*, exclude: Path | None = None) -> int:
+    """
+    Best-effort garbage collection for stale CCB runtime dirs under `$TMP/claude-ai-<user>/ai-*`.
+
+    Normal exits already remove the current `runtime_dir`. This targets leftovers from crashes
+    or hard kills (e.g. SIGKILL).
+    """
+    if not _env_bool("CCB_RUNTIME_GC", True):
+        return 0
+
+    min_age_s = max(0.0, float(_env_float("CCB_RUNTIME_GC_MIN_AGE_S", 24 * 3600.0)))
+    base = _runtime_base_dir()
+    try:
+        if not base.exists() or not base.is_dir():
+            return 0
+    except Exception:
+        return 0
+
+    exclude_resolved: str | None = None
+    if exclude is not None:
+        try:
+            exclude_resolved = str(Path(exclude).resolve())
+        except Exception:
+            exclude_resolved = str(exclude)
+
+    now = time.time()
+    removed = 0
+    try:
+        candidates = sorted(base.glob("ai-*"), key=lambda p: p.stat().st_mtime if p.exists() else 0.0)
+    except Exception:
+        candidates = []
+
+    for session_dir in candidates:
+        try:
+            if not session_dir.is_dir():
+                continue
+        except Exception:
+            continue
+
+        try:
+            if exclude_resolved and str(session_dir.resolve()) == exclude_resolved:
+                continue
+        except Exception:
+            if exclude_resolved and str(session_dir) == exclude_resolved:
+                continue
+
+        try:
+            st = session_dir.stat()
+            if min_age_s and (now - float(st.st_mtime)) < min_age_s:
+                continue
+        except Exception:
+            continue
+
+        # If any recorded PID is alive, don't delete.
+        alive = False
+        try:
+            for pid_file in session_dir.glob("**/*.pid"):
+                try:
+                    raw = pid_file.read_text(encoding="utf-8", errors="ignore").strip()
+                    if raw.isdigit() and _is_pid_alive(int(raw)):
+                        alive = True
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        if alive:
+            continue
+
+        try:
+            shutil.rmtree(session_dir, ignore_errors=True)
+            removed += 1
+        except Exception:
+            continue
+
+    return removed
+
+
+def _shrink_ccb_logs() -> int:
+    """
+    Best-effort log slimming for daemon logs to avoid disk bloat.
+
+    - Current daemons log under `~/.cache/ccb` (or `$XDG_CACHE_HOME/ccb`).
+    - Older installs may have left logs under `~/.ccb/run`.
+    """
+    if not _env_bool("CCB_LOG_SHRINK", True):
+        return 0
+
+    try:
+        max_bytes = max(0, int(_env_float("CCB_LOG_MAX_BYTES", 2 * 1024 * 1024)))
+    except Exception:
+        max_bytes = 2 * 1024 * 1024
+    if max_bytes <= 0:
+        return 0
+
+    # Cache directory (matches lib/askd_runtime.py defaults)
+    cache_dir: Path | None = None
+    xdg_cache = (os.environ.get("XDG_CACHE_HOME") or "").strip()
+    if xdg_cache:
+        cache_dir = Path(xdg_cache) / "ccb"
+    else:
+        cache_dir = Path.home() / ".cache" / "ccb"
+
+    legacy_dir = Path.home() / ".ccb" / "run"
+
+    def _shrink_file(path: Path) -> bool:
+        try:
+            if not path.exists() or not path.is_file():
+                return False
+            size = path.stat().st_size
+            if size <= max_bytes:
+                return False
+            with path.open("rb") as handle:
+                handle.seek(-max_bytes, os.SEEK_END)
+                tail = handle.read()
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_bytes(tail)
+            os.replace(tmp, path)
+            return True
+        except Exception:
+            try:
+                tmp = path.with_suffix(path.suffix + ".tmp")
+                if tmp.exists():
+                    tmp.unlink()
+            except Exception:
+                pass
+            return False
+
+    removed = 0
+    for base in (cache_dir, legacy_dir):
+        try:
+            if not base.exists() or not base.is_dir():
+                continue
+        except Exception:
+            continue
+        try:
+            for log_file in base.glob("*.log"):
+                if _shrink_file(log_file):
+                    removed += 1
+        except Exception:
+            continue
+    return removed
+
+
 class AILauncher:
     def __init__(
         self,
@@ -1437,6 +1710,24 @@ class AILauncher:
         except Exception:
             pass
 
+        # Best-effort cleanup of leftover `tmpclaude-*-cwd` artifacts.
+        try:
+            _cleanup_tmpclaude_artifacts()
+        except Exception:
+            pass
+
+        # Best-effort cleanup of stale runtime dirs in temp (crash leftovers).
+        try:
+            _cleanup_stale_runtime_dirs(exclude=self.runtime_dir)
+        except Exception:
+            pass
+
+        # Best-effort daemon log slimming (cache/legacy dirs).
+        try:
+            _shrink_ccb_logs()
+        except Exception:
+            pass
+
         if self.terminal_type == "wezterm":
             backend = WeztermBackend()
             for provider, pane_id in self.wezterm_panes.items():
@@ -1482,6 +1773,30 @@ class AILauncher:
         atexit.register(self.cleanup)
         signal.signal(signal.SIGINT, lambda s, f: (self.cleanup(), sys.exit(0)))
         signal.signal(signal.SIGTERM, lambda s, f: (self.cleanup(), sys.exit(0)))
+
+        # Best-effort cleanup of leftover `tmpclaude-*-cwd` artifacts (can be disabled via env).
+        try:
+            removed = _cleanup_tmpclaude_artifacts()
+            if removed and os.environ.get("CCB_DEBUG") in ("1", "true", "yes"):
+                print(f"🧹 Cleaned tmpclaude artifacts: {removed}")
+        except Exception:
+            pass
+
+        # Best-effort cleanup of stale runtime dirs in temp (crash leftovers).
+        try:
+            removed_runtime = _cleanup_stale_runtime_dirs(exclude=self.runtime_dir)
+            if removed_runtime and os.environ.get("CCB_DEBUG") in ("1", "true", "yes"):
+                print(f"🧹 Cleaned stale runtime dirs: {removed_runtime}")
+        except Exception:
+            pass
+
+        # Best-effort daemon log slimming (cache/legacy dirs).
+        try:
+            shrunk = _shrink_ccb_logs()
+            if shrunk and os.environ.get("CCB_DEBUG") in ("1", "true", "yes"):
+                print(f"🧹 Shrunk log files: {shrunk}")
+        except Exception:
+            pass
 
         # tmux-only: enable CCB UI theming for the current session while CCB is running.
         try:
