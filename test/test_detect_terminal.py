@@ -13,17 +13,21 @@ def _clear_terminal_env(monkeypatch) -> None:
 def test_detect_terminal_prefers_current_tmux_session(monkeypatch) -> None:
     _clear_terminal_env(monkeypatch)
     monkeypatch.setenv("TMUX", "/tmp/tmux-1000/default,123,0")
-    monkeypatch.setattr(terminal, "_get_wezterm_bin", lambda: "/usr/bin/wezterm")
     assert terminal.detect_terminal() == "tmux"
 
 
 def test_detect_terminal_does_not_select_tmux_when_not_inside_tmux(monkeypatch) -> None:
     _clear_terminal_env(monkeypatch)
-    monkeypatch.setattr(terminal, "_get_wezterm_bin", lambda: None)
     assert terminal.detect_terminal() is None
 
 
-def test_detect_terminal_selects_wezterm_when_available(monkeypatch) -> None:
+def test_detect_terminal_selects_wezterm_when_inside_wezterm(monkeypatch) -> None:
+    _clear_terminal_env(monkeypatch)
+    monkeypatch.setenv("WEZTERM_PANE", "123")
+    assert terminal.detect_terminal() == "wezterm"
+
+
+def test_detect_terminal_does_not_force_wezterm_when_not_inside_wezterm(monkeypatch) -> None:
     _clear_terminal_env(monkeypatch)
     monkeypatch.setattr(terminal, "_get_wezterm_bin", lambda: "/usr/bin/wezterm")
-    assert terminal.detect_terminal() == "wezterm"
+    assert terminal.detect_terminal() is None

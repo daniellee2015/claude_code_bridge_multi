@@ -814,10 +814,9 @@ def detect_terminal() -> Optional[str]:
     if os.environ.get("TMUX") or os.environ.get("TMUX_PANE"):
         return "tmux"
 
-    # Priority 2: detect available split-capable terminals.
-    # Note: "tmux is installed" != "we are in tmux", so don't auto-select tmux here.
-    if _get_wezterm_bin():
-        return "wezterm"
+    # Only detect the *current* terminal environment here.
+    # Availability checks (e.g. whether wezterm is installed) should not force the backend
+    # when the user is running ccb in a different terminal.
     return None
 
 
