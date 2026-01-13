@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
+import argparse
 
 script_dir = Path(__file__).resolve().parent
 lib_dir = script_dir.parent / "lib"
@@ -19,6 +20,8 @@ from i18n import t
 try:
     from cli_output import EXIT_ERROR, EXIT_NO_REPLY, EXIT_OK
     from gemini_comm import GeminiLogReader
+    from askd_client import resolve_work_dir
+    from providers import GASK_CLIENT_SPEC
     from session_utils import find_project_session_file
 except ImportError as exc:
     print(f"Import failed: {exc}")
@@ -35,9 +38,9 @@ def _debug(message: str) -> None:
     print(f"[DEBUG] {message}", file=sys.stderr)
 
 
-def _load_session_path() -> Path | None:
+def _load_session_path(work_dir: Path) -> Path | None:
     """Load gemini_session_path from .gemini-session (or .ccb_config/.gemini-session) if exists"""
-    session_file = find_project_session_file(Path.cwd(), ".gemini-session")
+    session_file = find_project_session_file(work_dir, ".gemini-session")
     if not session_file:
         return None
     try:
@@ -51,9 +54,9 @@ def _load_session_path() -> Path | None:
     return None
 
 
-def _update_session_file(actual_session: Path) -> None:
+def _update_session_file(work_dir: Path, actual_session: Path) -> None:
     """Update .gemini-session with actual session path if different"""
-    session_file = find_project_session_file(Path.cwd(), ".gemini-session")
+    session_file = find_project_session_file(work_dir, ".gemini-session")
     if not session_file:
         return
     try:
@@ -77,37 +80,33 @@ def _update_session_file(actual_session: Path) -> None:
         _debug(f"Failed to update .gemini-session: {exc}")
 
 
-def _parse_n(argv: list[str]) -> int:
-    if len(argv) <= 1:
-        return 1
-    if argv[1] in ("-h", "--help"):
-        print("Usage: gpend [N]", file=sys.stderr)
-        raise SystemExit(EXIT_OK)
-    try:
-        n = int(argv[1])
-    except ValueError:
-        print("Usage: gpend [N]", file=sys.stderr)
-        raise SystemExit(EXIT_ERROR)
-    return max(1, n)
-
-
 def main(argv: list[str]) -> int:
     try:
-        n = _parse_n(argv)
+        parser = argparse.ArgumentParser(prog="gpend", add_help=True)
+        parser.add_argument("n", nargs="?", type=int, default=1, help="Show the latest N conversations")
+        parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .gemini-session (or .ccb_config/.gemini-session)")
+        args = parser.parse_args(argv[1:])
+
+        n = max(1, int(args.n or 1))
+        work_dir, _ = resolve_work_dir(
+            GASK_CLIENT_SPEC,
+            cli_session_file=args.session_file,
+            env_session_file=os.environ.get("CCB_SESSION_FILE"),
+        )
 
         # Try session-specific path first
-        session_path = _load_session_path()
+        session_path = _load_session_path(work_dir)
         if session_path:
             _debug(f"Using gemini_session_path from .gemini-session: {session_path}")
 
-        reader = GeminiLogReader()
+        reader = GeminiLogReader(work_dir=work_dir)
         if session_path and session_path.exists():
             reader.set_preferred_session(session_path)
 
         # Auto-update .gemini-session with actual session path
         actual_session = reader.current_session_path()
         if actual_session:
-            _update_session_file(actual_session)
+            _update_session_file(work_dir, actual_session)
 
         if n > 1:
             conversations = reader.latest_conversations(n)

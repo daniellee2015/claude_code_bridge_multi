@@ -153,6 +153,28 @@ class GeminiLogReader:
     def current_session_path(self) -> Optional[Path]:
         return self._latest_session()
 
+    def _read_session_json(self, session: Path) -> Optional[dict]:
+        """
+        Read a Gemini session JSON file with retries.
+
+        Gemini CLI may write the session file in-place, causing transient JSONDecodeError.
+        """
+        if not session or not session.exists():
+            return None
+        for attempt in range(10):
+            try:
+                with session.open("r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                return loaded if isinstance(loaded, dict) else None
+            except json.JSONDecodeError:
+                # Transient partial write; retry briefly.
+                if attempt < 9:
+                    time.sleep(min(self._poll_interval, 0.05))
+                continue
+            except OSError:
+                return None
+        return None
+
     def capture_state(self) -> Dict[str, Any]:
         """Record current session file and message count"""
         session = self._latest_session()
@@ -172,20 +194,7 @@ class GeminiLogReader:
             except OSError:
                 stat = None
 
-            # The session JSON may be written in-place; retry briefly to avoid transient JSONDecodeError.
-            for attempt in range(10):
-                try:
-                    with session.open("r", encoding="utf-8") as f:
-                        loaded = json.load(f)
-                    if isinstance(loaded, dict):
-                        data = loaded
-                    break
-                except json.JSONDecodeError:
-                    if attempt < 9:
-                        time.sleep(min(self._poll_interval, 0.05))
-                    continue
-                except OSError:
-                    break
+            data = self._read_session_json(session)
 
             if data is None:
                 # Unknown baseline (parse failed). Let the wait loop establish a stable baseline first.
@@ -220,8 +229,9 @@ class GeminiLogReader:
         if not session or not session.exists():
             return None
         try:
-            with session.open("r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = self._read_session_json(session)
+            if not isinstance(data, dict):
+                return None
             messages = data.get("messages", [])
             for msg in reversed(messages):
                 if msg.get("type") == "gemini":
@@ -236,8 +246,9 @@ class GeminiLogReader:
         if not session or not session.exists():
             return []
         try:
-            with session.open("r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = self._read_session_json(session)
+            if not isinstance(data, dict):
+                return []
             messages = data.get("messages", [])
         except (OSError, json.JSONDecodeError):
             return []
@@ -332,8 +343,9 @@ class GeminiLogReader:
                         continue
                     # fallthrough: forced read
 
-                with session.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
+                data = self._read_session_json(session)
+                if data is None:
+                    raise json.JSONDecodeError("Gemini session JSON is incomplete", "", 0)
                 last_forced_read = time.time()
                 messages = data.get("messages", [])
                 current_count = len(messages)
