@@ -38,7 +38,7 @@ backend_env = get_backend_env()
 if backend_env and not os.environ.get("CCB_BACKEND_ENV"):
     os.environ["CCB_BACKEND_ENV"] = backend_env
 
-VERSION = "4.0.3"
+VERSION = "4.0.4"
 GIT_COMMIT = ""
 GIT_DATE = ""
 
@@ -1072,6 +1072,21 @@ class AILauncher:
         if not codex_config.exists():
             return
 
+        def _toml_unescape_basic_string(value: str) -> str:
+            # Minimal TOML basic-string unescape for our use-case (paths).
+            # https://toml.io/en/v1.0.0#string
+            try:
+                return (
+                    (value or "")
+                    .replace("\\\\", "\\")
+                    .replace('\\"', '"')
+                    .replace("\\t", "\t")
+                    .replace("\\n", "\n")
+                    .replace("\\r", "\r")
+                )
+            except Exception:
+                return value or ""
+
         def _toml_escape_basic_string(value: str) -> str:
             return (value or "").replace("\\", "\\\\").replace('"', '\\"')
 
@@ -1088,6 +1103,62 @@ class AILauncher:
 
         try:
             content = codex_config.read_text(encoding="utf-8")
+
+            def _dedupe_duplicate_project_tables(text: str) -> tuple[str, bool]:
+                """
+                Codex TOML rejects duplicate `[projects.\"<path>\"]` tables.
+                Keep the last occurrence for each key and drop earlier duplicates.
+                """
+                lines = (text or "").splitlines(keepends=True)
+                if not lines:
+                    return text, False
+
+                sections: list[tuple[str | None, list[str], str | None]] = []
+                header: str | None = None
+                body: list[str] = []
+
+                def flush() -> None:
+                    nonlocal header, body
+                    if header is None and not body:
+                        return
+                    key: str | None = None
+                    if header:
+                        h = header.strip()
+                        if h.startswith("[projects.") and h.endswith("]"):
+                            inner = h[len("[projects.") : -1].strip()
+                            if len(inner) >= 2 and inner[0] == inner[-1] and inner[0] in {'"', "'"}:
+                                raw = inner[1:-1]
+                                key = _toml_unescape_basic_string(raw) if inner[0] == '"' else raw
+                    sections.append((header or "", body, key))
+                    header = None
+                    body = []
+
+                for ln in lines:
+                    # Start of a TOML table/array-of-table header (top-level only).
+                    if ln.startswith("["):
+                        flush()
+                        header = ln
+                        body = []
+                        continue
+                    body.append(ln)
+                flush()
+
+                last: dict[str, int] = {}
+                for i, (_h, _b, k) in enumerate(sections):
+                    if k is not None:
+                        last[k] = i
+
+                changed = False
+                out: list[str] = []
+                for i, (h, b, k) in enumerate(sections):
+                    if k is not None and last.get(k) != i:
+                        changed = True
+                        continue
+                    out.append(h)
+                    out.extend(b)
+                return "".join(out), changed
+
+            content, deduped = _dedupe_duplicate_project_tables(content)
 
             def _section_bounds(text: str, header: str) -> tuple[int, int] | None:
                 m = re.search(rf"(?m)^{re.escape(header)}\\s*$", text)
@@ -1172,7 +1243,11 @@ class AILauncher:
                 content = content.rstrip() + "\n\n" + entry
                 changed_any = True
 
-            if changed_any:
+            # De-dupe again after edits, in case older configs already had duplicates.
+            content, deduped_after = _dedupe_duplicate_project_tables(content)
+            deduped = deduped or deduped_after
+
+            if changed_any or deduped:
                 codex_config.write_text(content, encoding="utf-8")
                 print(f"✅ Codex auto-approval configured for: {cwd}")
         except Exception as e:
