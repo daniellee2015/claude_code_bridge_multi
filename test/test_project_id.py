@@ -9,8 +9,19 @@ from project_id import compute_ccb_project_id, normalize_work_dir
 
 
 def test_normalize_work_dir_basic() -> None:
-    assert normalize_work_dir("/a/b/../c") == "/a/c"
-    assert normalize_work_dir("/a//b///c") == "/a/b/c"
+    # On Windows, /a/... is interpreted as MSYS path (a:/)
+    # On Unix, it's a regular absolute path
+    result1 = normalize_work_dir("/a/b/../c")
+    if os.name == 'nt':
+        assert result1 == "a:/c", f"Expected a:/c on Windows, got {result1}"
+    else:
+        assert result1 == "/a/c", f"Expected /a/c on Unix, got {result1}"
+
+    result2 = normalize_work_dir("/a//b///c")
+    if os.name == 'nt':
+        assert result2 == "a:/b/c", f"Expected a:/b/c on Windows, got {result2}"
+    else:
+        assert result2 == "/a/b/c", f"Expected /a/b/c on Unix, got {result2}"
 
 
 def test_normalize_work_dir_wsl_drive_mapping() -> None:
