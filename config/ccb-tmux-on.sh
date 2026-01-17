@@ -16,6 +16,7 @@ fi
 bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 status_script="$bin_dir/ccb-status.sh"
 border_script="$bin_dir/ccb-border.sh"
+git_script="$bin_dir/ccb-git.sh"
 
 save_sopt() {
   local opt="$1"
@@ -73,7 +74,8 @@ tmux set-option -t "$session" @ccb_active "1" >/dev/null 2>&1 || true
 # ---------------------------------------------------------------------------
 
 tmux set-option -t "$session" status-position bottom >/dev/null 2>&1 || true
-tmux set-option -t "$session" status-interval 5 >/dev/null 2>&1 || true
+status_interval="${CCB_TMUX_STATUS_INTERVAL:-5}"
+tmux set-option -t "$session" status-interval "$status_interval" >/dev/null 2>&1 || true
 tmux set-option -t "$session" status-style 'bg=#1e1e2e fg=#cdd6f4' >/dev/null 2>&1 || true
 tmux set-option -t "$session" status 2 >/dev/null 2>&1 || true
 
@@ -91,14 +93,27 @@ tmux set-option -t "$session" 'status-format[0]' "$status_format_0" >/dev/null 2
 # Mode-aware status-left: [MODE] > [git-branch] > [CCA]
 accent='#{?client_prefix,#f38ba8,#{?pane_in_mode,#fab387,#f5c2e7}}'
 label='#{?client_prefix,KEY,#{?pane_in_mode,COPY,INPUT}}'
-git_info='#(cd "#{pane_current_path}" 2>/dev/null && { b=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); [ -n "$b" ] && { d=$(git status --porcelain 2>/dev/null | head -1); [ -n "$d" ] && echo "$b*" || echo "$b"; } || echo -; })'
+git_info='-'
+if [[ -x "$git_script" ]]; then
+  # Cached to avoid blocking tmux (git can be slow in big repos).
+  git_info="#(${git_script} \"#{pane_current_path}\")"
+fi
 cca_status='#([ -f /tmp/cca.pid ] && kill -0 $(cat /tmp/cca.pid 2>/dev/null) 2>/dev/null && echo "ON" || echo "OFF")'
 tmux set-option -t "$session" status-left "#[fg=#1e1e2e,bg=${accent},bold] ${label} #[fg=${accent},bg=#cba6f7]#[fg=#1e1e2e,bg=#cba6f7] ${git_info} #[fg=#cba6f7,bg=#89b4fa]#[fg=#1e1e2e,bg=#89b4fa] CCA:${cca_status} #[fg=#89b4fa,bg=#1e1e2e]" >/dev/null 2>&1 || true
 
 # Right: < Focus:AI < CCB:ver < ○○○○ < HH:MM
-ccb_version='#(ccb --version 2>/dev/null | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | head -1 || echo "?")'
+ccb_version="$(ccb --print-version 2>/dev/null || true)"
+if [[ -z "$ccb_version" ]]; then
+  ccb_path="$(command -v ccb 2>/dev/null || true)"
+  if [[ -n "$ccb_path" && -f "$ccb_path" ]]; then
+    ccb_version="$(grep -oE 'VERSION = \"[0-9]+\\.[0-9]+\\.[0-9]+\"' "$ccb_path" 2>/dev/null | head -n 1 | sed -E 's/.*\"([0-9]+\\.[0-9]+\\.[0-9]+)\"/v\\1/' || true)"
+  fi
+fi
+[[ -n "$ccb_version" ]] || ccb_version="?"
+tmux set-option -t "$session" @ccb_version "$ccb_version" >/dev/null 2>&1 || true
+
 focus_agent='#{?#{@ccb_agent},#{@ccb_agent},-}'
-status_right="#[fg=#f38ba8,bg=#1e1e2e]#[fg=#1e1e2e,bg=#f38ba8,bold] ${focus_agent} #[fg=#cba6f7,bg=#f38ba8]#[fg=#1e1e2e,bg=#cba6f7,bold] CCB:${ccb_version} #[fg=#89b4fa,bg=#cba6f7]#[fg=#cdd6f4,bg=#89b4fa] #(${status_script} modern) #[fg=#fab387,bg=#89b4fa]#[fg=#1e1e2e,bg=#fab387,bold] %m/%d %a %H:%M #[default]"
+status_right="#[fg=#f38ba8,bg=#1e1e2e]#[fg=#1e1e2e,bg=#f38ba8,bold] ${focus_agent} #[fg=#cba6f7,bg=#f38ba8]#[fg=#1e1e2e,bg=#cba6f7,bold] CCB:#{@ccb_version} #[fg=#89b4fa,bg=#cba6f7]#[fg=#cdd6f4,bg=#89b4fa] #(${status_script} modern) #[fg=#fab387,bg=#89b4fa]#[fg=#1e1e2e,bg=#fab387,bold] %m/%d %a %H:%M #[default]"
 tmux set-option -t "$session" status-right "$status_right" >/dev/null 2>&1 || true
 
 tmux set-option -t "$session" window-status-format '' >/dev/null 2>&1 || true
@@ -119,4 +134,3 @@ pane_id="$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)"
 if [[ -n "$pane_id" && -x "$border_script" ]]; then
   "$border_script" "$pane_id" >/dev/null 2>&1 || true
 fi
-

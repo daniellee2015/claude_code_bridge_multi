@@ -67,3 +67,4 @@ restore_sopt window-status-current-format @ccb_prev_window_status_current_format
 restore_sopt window-status-separator @ccb_prev_window_status_separator
 
 tmux set-option -t "$session" -u @ccb_active >/dev/null 2>&1 || true
+tmux set-option -t "$session" -u @ccb_version >/dev/null 2>&1 || true

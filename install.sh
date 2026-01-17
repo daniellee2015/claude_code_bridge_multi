@@ -948,6 +948,15 @@ install_tmux_config() {
     echo "Installed: $border_install_path"
   fi
 
+  # Install ccb-git.sh script (cached git status for tmux status line)
+  local ccb_git_script="$REPO_ROOT/config/ccb-git.sh"
+  local git_install_path="$BIN_DIR/ccb-git.sh"
+  if [[ -f "$ccb_git_script" ]]; then
+    cp "$ccb_git_script" "$git_install_path"
+    chmod +x "$git_install_path"
+    echo "Installed: $git_install_path"
+  fi
+
   # Install tmux UI toggle scripts (enable/disable CCB theming per-session)
   local ccb_tmux_on_script="$REPO_ROOT/config/ccb-tmux-on.sh"
   local ccb_tmux_off_script="$REPO_ROOT/config/ccb-tmux-off.sh"

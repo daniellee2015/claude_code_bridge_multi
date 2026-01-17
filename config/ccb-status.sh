@@ -30,10 +30,12 @@ check_daemon() {
         fi
     fi
 
-    # Fallback: check if daemon process is running
-    if pgrep -f "${name}d" >/dev/null 2>&1; then
-        echo "on"
-        return
+    # Optional fallback: pgrep can be expensive; keep it opt-in.
+    if [[ "${CCB_STATUS_ALLOW_PGREP:-0}" == "1" ]]; then
+        if pgrep -f "${name}d" >/dev/null 2>&1; then
+            echo "on"
+            return
+        fi
     fi
 
     echo "off"
@@ -97,6 +99,22 @@ format_ai_status() {
 # Main status output
 main() {
     local mode="${1:-full}"
+    local cache_s="${CCB_STATUS_CACHE_S:-1}"
+    local cache_file="$TMP_DIR/ccb-status.${mode}.cache"
+
+    # Simple cache to avoid hammering the system on frequent tmux redraws.
+    if [[ "$cache_s" =~ ^[0-9]+$ ]] && (( cache_s > 0 )) && [[ -f "$cache_file" ]]; then
+        local now ts cached
+        now="$(date +%s 2>/dev/null || echo 0)"
+        ts="$(head -n 1 "$cache_file" 2>/dev/null || true)"
+        if [[ "$ts" =~ ^[0-9]+$ ]] && (( now - ts < cache_s )); then
+            cached="$(sed -n '2p' "$cache_file" 2>/dev/null || true)"
+            if [[ -n "$cached" ]]; then
+                echo "$cached"
+                return 0
+            fi
+        fi
+    fi
 
     case "$mode" in
         full)
@@ -106,7 +124,7 @@ main() {
             local gemini_s=$(format_ai_status "gask" "G" "$C_BLUE")
             local opencode_s=$(format_ai_status "oask" "O" "$C_PURPLE")
 
-            echo " ${claude_s}${codex_s}${gemini_s}${opencode_s} "
+            out=" ${claude_s}${codex_s}${gemini_s}${opencode_s} "
             ;;
 
         daemons)
@@ -124,7 +142,7 @@ main() {
             fi
 
             if [[ -n "$output" ]]; then
-                echo " $output "
+                out=" $output "
             fi
             ;;
 
@@ -150,7 +168,7 @@ main() {
                 icons+="${C_DIM}○${C_RESET}"
             fi
 
-            echo "${output}${icons}"
+            out="${output}${icons}"
             ;;
 
         modern)
@@ -181,7 +199,7 @@ main() {
                 output+="${C_DIM}○${C_RESET}"
             fi
 
-            echo "${output}"
+            out="${output}"
             ;;
 
         pane)
@@ -198,6 +216,19 @@ main() {
             fi
             ;;
     esac
+
+    if [[ -n "${out:-}" ]]; then
+        if [[ "$cache_s" =~ ^[0-9]+$ ]] && (( cache_s > 0 )); then
+            now="$(date +%s 2>/dev/null || echo 0)"
+            tmp="${cache_file}.tmp.$$"
+            {
+                echo "$now"
+                echo "$out"
+            } > "$tmp" 2>/dev/null || true
+            mv -f "$tmp" "$cache_file" 2>/dev/null || true
+        fi
+        echo "$out"
+    fi
 }
 
 main "$@"

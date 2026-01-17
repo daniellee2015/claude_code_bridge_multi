@@ -1,6 +1,6 @@
 <div align="center">
 
-# Claude Code Bridge (ccb) v4.1.1
+# Claude Code Bridge (ccb) v4.1.2
 
 **Silky Smooth Claude & Codex & Gemini Collaboration via Split-Pane Terminal**
 
@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/Every_Model_Controllable-CF1322?style=for-the-badge" alt="Every Model Controllable">
 </p>
 
-[![Version](https://img.shields.io/badge/version-4.1.1-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-4.1.2-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/bfly123/claude_code_bridge/actions/workflows/test.yml/badge.svg)](https://github.com/bfly123/claude_code_bridge/actions/workflows/test.yml)
@@ -400,6 +400,11 @@ Once started, collaborate naturally. Claude will detect when to delegate tasks.
 
 <details>
 <summary><b>Version History</b></summary>
+
+### v4.1.2
+- **Performance**: Added caching for tmux status bar (git branch & ccb status) to reduce system load
+- **Strict Tmux**: Explicitly require `tmux` for auto-launch; removed error-prone auto-attach logic
+- **CLI**: Added `--print-version` flag for fast version checks
 
 ### v4.1.1
 - **CLI Fix**: Improved flag preservation (e.g., `-a`) when relaunching `ccb up` in tmux

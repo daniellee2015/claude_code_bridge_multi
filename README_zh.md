@@ -1,6 +1,6 @@
 <div align="center">
 
-# Claude Code Bridge (ccb) v4.1.1
+# Claude Code Bridge (ccb) v4.1.2
 
 **基于终端分屏的 Claude & Codex & Gemini 丝滑协作工具**
 
@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/Every_Model_Controllable-CF1322?style=for-the-badge" alt="Every Model Controllable">
 </p>
 
-[![Version](https://img.shields.io/badge/version-4.1.1-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-4.1.2-orange.svg)]()
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
 
 [English](README.md) | **中文**
@@ -436,6 +436,11 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile
 
 <details>
 <summary><b>更新历史</b></summary>
+
+### v4.1.2
+- **性能优化**: 为 tmux 状态栏 (git 分支 & ccb 状态) 增加缓存，大幅降低系统负载
+- **严格模式**: 明确要求在 `tmux` 内运行; 移除不稳定的自动 attach 逻辑，避免环境混乱
+- **CLI**: 新增 `--print-version` 参数用于快速版本检查
 
 ### v4.1.1
 - **CLI 修复**: 修复 `ccb up` 在 tmux 中重启时参数丢失 (如 `-a`) 的问题

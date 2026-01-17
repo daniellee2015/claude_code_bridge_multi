@@ -272,18 +272,27 @@ class TmuxBackend(TerminalBackend):
         """
         Return current tmux pane id in `%xx` format.
 
-        - Inside tmux, prefer `$TMUX_PANE`.
-        - Fallback to `tmux display-message` (requires an attached client).
+        Notes:
+        - `$TMUX_PANE` in the shell environment can become stale in some tmux workflows
+          (e.g. when panes are moved/replaced). Prefer asking tmux for the current pane id.
+        - In detached sessions (no client attached), `display-message` may fail; fall back to
+          `$TMUX_PANE` when it points to a live pane.
         """
+        # Prefer querying the currently attached client for the active pane id.
+        try:
+            cp = self._tmux_run(["display-message", "-p", "#{pane_id}"], capture=True, timeout=0.5)
+            out = (cp.stdout or "").strip()
+            if self._looks_like_pane_id(out) and self.is_pane_alive(out):
+                return out
+        except Exception:
+            pass
+
+        # Fallback: use the environment variable if it points to a live pane.
         env_pane = (os.environ.get("TMUX_PANE") or "").strip()
-        if self._looks_like_pane_id(env_pane):
+        if self._looks_like_pane_id(env_pane) and self.is_pane_alive(env_pane):
             return env_pane
 
-        cp = self._tmux_run(["display-message", "-p", "#{pane_id}"], capture=True)
-        out = (cp.stdout or "").strip()
-        if self._looks_like_pane_id(out):
-            return out
-        raise RuntimeError("tmux current pane id not available (not in tmux client?)")
+        raise RuntimeError("tmux current pane id not available")
 
     def split_pane(self, parent_pane_id: str, direction: str, percent: int) -> str:
         """
@@ -581,8 +590,14 @@ class TmuxBackend(TerminalBackend):
         cmd = (cmd or "").strip()
         cwd = (cwd or ".").strip() or "."
 
-        if parent_pane or os.environ.get("TMUX_PANE"):
-            base = parent_pane or self.get_current_pane_id()
+        base: str | None = (parent_pane or "").strip() or None
+        if not base:
+            try:
+                base = self.get_current_pane_id()
+            except Exception:
+                base = None
+
+        if base:
             new_pane = self.split_pane(base, direction=direction, percent=percent)
             if cmd:
                 self.respawn_pane(new_pane, cmd=cmd, cwd=cwd)
@@ -893,11 +908,6 @@ def detect_terminal() -> Optional[str]:
     if os.environ.get("TMUX") or os.environ.get("TMUX_PANE"):
         return "tmux"
     if os.environ.get("WEZTERM_PANE"):
-        return "wezterm"
-
-    # WSL-specific: WezTerm on Windows does not always propagate WEZTERM_PANE into tmux server env
-    # (or custom shells), but wezterm CLI may still be reachable via interop.
-    if is_wsl() and _is_windows_wezterm() and _wezterm_cli_is_alive():
         return "wezterm"
 
     return None

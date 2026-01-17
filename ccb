@@ -39,7 +39,7 @@ backend_env = get_backend_env()
 if backend_env and not os.environ.get("CCB_BACKEND_ENV"):
     os.environ["CCB_BACKEND_ENV"] = backend_env
 
-VERSION = "4.1.1"
+VERSION = "4.1.2"
 GIT_COMMIT = ""
 GIT_DATE = ""
 
@@ -688,13 +688,10 @@ class AILauncher:
             return "wezterm"
 
         # Not inside any multiplexer:
-        # Prefer split-capable terminals (WezTerm) when available,
-        # otherwise fall back to tmux auto-session creation.
+        # Allow WezTerm-only mode only when actually inside a WezTerm pane.
         detected = detect_terminal()
         if detected:
             return detected
-        if shutil.which("tmux"):
-            return "tmux"
 
         # Nothing found
         return None
@@ -764,101 +761,6 @@ class AILauncher:
         )
         return True
 
-    def _launch_in_new_tmux_session(self) -> bool:
-        """Create a new tmux session and attach to it, re-running ccb inside."""
-        # Avoid auto-attaching in non-interactive contexts (pipes/CI); provide a clear hint instead.
-        if not (sys.stdin.isatty() and sys.stdout.isatty()):
-            print("❌ Not running inside tmux/WezTerm, and this session is non-interactive.", file=sys.stderr)
-            print("💡 Fix: run `tmux` first, then re-run the same `ccb ...` command inside tmux.", file=sys.stderr)
-            print("   (Or launch from WezTerm, or set CCB_TERMINAL=wezterm/tmux explicitly.)", file=sys.stderr)
-            return False
-
-        # IMPORTANT: session name must be unique per run. Using only a short prefix of
-        # `ai-<epoch>-<pid>` collides frequently (same day) and can incorrectly attach to an old session.
-        session_name = f"ccb-{self.session_id}"
-        # Re-run ccb with the original argv to preserve all flags (e.g. --init/--auto/--resume)
-        # and any future CLI options without having to mirror them here.
-        ccb_cmd = shlex.join([str(self.script_dir / "ccb"), *sys.argv[1:]])
-
-        # Check if session already exists
-        check = subprocess.run(
-            ["tmux", "has-session", "-t", session_name],
-            capture_output=True,
-        )
-        if check.returncode == 0:
-            # Session exists, ask user what to do
-            print(f"⚠️  tmux session '{session_name}' already exists.")
-            print(f"   Attaching to existing session...")
-            os.execlp("tmux", "tmux", "attach-session", "-t", session_name)
-            return True
-
-        print(f"📺 {t('creating_tmux_session', session=session_name)}")
-
-        # Create new tmux session and run ccb directly as the session command.
-        #
-        # Tmux 3.4 may run into pane sizing issues in detached sessions (no client attached yet).
-        # We avoid `split-window -p` elsewhere, but setting an initial session size still improves UX.
-        size_override = (os.environ.get("CCB_TMUX_START_SIZE") or "").strip().lower()
-        width = None
-        height = None
-        if size_override and "x" in size_override:
-            try:
-                w_s, h_s = size_override.split("x", 1)
-                width = int(w_s.strip())
-                height = int(h_s.strip())
-            except Exception:
-                width = None
-                height = None
-        if width is None or height is None:
-            try:
-                sz = shutil.get_terminal_size(fallback=(120, 30))
-                width = int(sz.columns)
-                height = int(sz.lines)
-            except Exception:
-                width = None
-                height = None
-
-        try:
-            base_cmd = ["tmux", "new-session", "-d", "-s", session_name, "-c", str(Path.cwd())]
-            sized_cmd = list(base_cmd)
-            if width and height and width >= 40 and height >= 10:
-                sized_cmd.extend(["-x", str(width), "-y", str(height)])
-            sized_cmd.append(ccb_cmd)
-
-            try:
-                subprocess.run(
-                    sized_cmd,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                )
-            except subprocess.CalledProcessError:
-                # Fallback for older tmux versions that may not support -x/-y.
-                subprocess.run(
-                    [*base_cmd, ccb_cmd],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                )
-
-            # Attach to the session (replaces current process)
-            print(f"🔗 {t('attaching_to_tmux', session=session_name)}")
-            os.execlp("tmux", "tmux", "attach-session", "-t", session_name)
-        except subprocess.CalledProcessError as e:
-            stderr = (getattr(e, "stderr", "") or "").strip()
-            stdout = (getattr(e, "stdout", "") or "").strip()
-            detail = stderr or stdout or str(e)
-            print(f"❌ Failed to create tmux session: {detail}", file=sys.stderr)
-            return False
-        except Exception as e:
-            print(f"❌ Failed to attach to tmux session: {e}", file=sys.stderr)
-            return False
-        return True  # Never reached due to execlp
-
     def _start_provider(self, provider: str) -> bool:
         # Handle case when no terminal detected
         if self.terminal_type is None:
@@ -888,9 +790,12 @@ class AILauncher:
                 print(f"   {t('install_wezterm_or_tmux')}")
                 return False
 
-        # If not inside tmux, create a new session and attach to it
+        # Require an existing tmux client session (no auto-launch).
         if not (os.environ.get("TMUX") or os.environ.get("TMUX_PANE")):
-            return self._launch_in_new_tmux_session()
+            print(f"❌ {t('tmux_installed_not_inside')}", file=sys.stderr)
+            print(f"💡 Run: tmux", file=sys.stderr)
+            print(f"   Then: {' '.join(['ccb', *sys.argv[1:]])}", file=sys.stderr)
+            return False
 
         print(f"🚀 {t('starting_backend', provider=provider.capitalize(), terminal='tmux')}")
 
@@ -1330,7 +1235,17 @@ class AILauncher:
     def _build_codex_start_cmd(self) -> str:
         if self.auto:
             self._ensure_codex_auto_approval()
-        cmd = "codex -c=disable_paste_burst=true --dangerously-bypass-approvals-and-sandbox" if self.auto else "codex -c=disable_paste_burst=true"
+        # NOTE: Codex CLI (codex-cli) does not support the legacy flag
+        # `--dangerously-bypass-approvals-and-sandbox`. Auto-mode is implemented via config and
+        # supported `-c key=value` overrides.
+        cmd_parts = ["codex", "-c", "disable_paste_burst=true"]
+        if self.auto:
+            cmd_parts.extend([
+                "-c", 'trust_level="trusted"',
+                "-c", 'approval_policy="never"',
+                "-c", 'sandbox_mode="full-auto"',
+            ])
+        cmd = " ".join(cmd_parts)
         codex_resumed = False
         if self.resume:
             session_id, has_history = self._get_latest_codex_session_id()
@@ -1534,7 +1449,11 @@ class AILauncher:
         backend = TmuxBackend()
 
         want_grid = {"codex", "gemini", "opencode"}.issubset(set(self.providers))
-        current_pane = os.environ.get("TMUX_PANE")
+        current_pane = None
+        try:
+            current_pane = backend.get_current_pane_id()
+        except Exception:
+            current_pane = None
         if want_grid and current_pane:
             if not self.tmux_panes:
                 direction = "right"
@@ -1558,7 +1477,12 @@ class AILauncher:
 
         self.tmux_panes["codex"] = pane_id
 
-        self._write_cend_registry(os.environ.get("TMUX_PANE", ""), pane_id)
+        claude_pane_id = None
+        try:
+            claude_pane_id = backend.get_current_pane_id()
+        except Exception:
+            claude_pane_id = os.environ.get("TMUX_PANE", "")
+        self._write_cend_registry(str(claude_pane_id or ""), pane_id)
 
         bridge_script = self.script_dir / "lib" / "codex_dual_bridge.py"
         bridge_env = os.environ.copy()
@@ -1621,7 +1545,11 @@ class AILauncher:
         backend = TmuxBackend()
 
         want_grid = {"codex", "gemini", "opencode"}.issubset(set(self.providers))
-        current_pane = os.environ.get("TMUX_PANE")
+        current_pane = None
+        try:
+            current_pane = backend.get_current_pane_id()
+        except Exception:
+            current_pane = None
         if want_grid and current_pane:
             if not self.tmux_panes:
                 direction = "right"
@@ -1669,7 +1597,11 @@ class AILauncher:
         backend = TmuxBackend()
 
         want_grid = {"codex", "gemini", "opencode"}.issubset(set(self.providers))
-        current_pane = os.environ.get("TMUX_PANE")
+        current_pane = None
+        try:
+            current_pane = backend.get_current_pane_id()
+        except Exception:
+            current_pane = None
         if want_grid and current_pane:
             if not self.tmux_panes:
                 direction = "right"
@@ -2156,6 +2088,26 @@ class AILauncher:
         print(f"🔌 Backends: {', '.join(self.providers)}")
         print("=" * 50)
 
+        # Require WezTerm pane or an existing tmux client session.
+        # In plain terminals, users must run tmux first (no auto-launch).
+        inside_tmux = bool(os.environ.get("TMUX") or os.environ.get("TMUX_PANE"))
+        inside_wezterm = bool(os.environ.get("WEZTERM_PANE"))
+
+        if self.terminal_type == "wezterm" and not inside_wezterm:
+            self.terminal_type = None
+        if self.terminal_type == "tmux" and not inside_tmux:
+            self.terminal_type = None
+
+        if self.terminal_type is None:
+            print(f"❌ {t('no_terminal_backend')}", file=sys.stderr)
+            print(f"   {t('solutions')}", file=sys.stderr)
+            print(f"   - {t('install_wezterm')}", file=sys.stderr)
+            print(f"   - {t('or_install_tmux')}", file=sys.stderr)
+            if (shutil.which('tmux') or shutil.which('tmux.exe')):
+                print(f"   - {t('tmux_installed_not_inside')}", file=sys.stderr)
+            print(f"   - {t('or_set_ccb_terminal')}", file=sys.stderr)
+            return 2
+
         if not self._require_project_config_dir():
             return 2
 
@@ -2196,10 +2148,11 @@ class AILauncher:
         # tmux-only: label the current pane as Claude so pane titles are consistent.
         # (Codex/Gemini/OpenCode panes are titled when created.)
         try:
-            if self.terminal_type == "tmux" and os.environ.get("TMUX_PANE"):
+            if self.terminal_type == "tmux" and os.environ.get("TMUX"):
                 backend = TmuxBackend()
-                backend.set_pane_title(os.environ["TMUX_PANE"], "Claude")
-                backend.set_pane_user_option(os.environ["TMUX_PANE"], "@ccb_agent", "Claude")
+                pane_id = backend.get_current_pane_id()
+                backend.set_pane_title(pane_id, "Claude")
+                backend.set_pane_user_option(pane_id, "@ccb_agent", "Claude")
         except Exception:
             pass
 
@@ -2986,6 +2939,7 @@ def cmd_update(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Claude AI unified launcher", add_help=True)
+    parser.add_argument("--print-version", action="store_true", help="Print local version (fast) and exit")
     subparsers = parser.add_subparsers(dest="command", help="Subcommands")
 
     # up subcommand
@@ -3020,8 +2974,12 @@ def main():
     if argv and argv[0] in {"-r", "--resume", "--restore"}:
         argv = ["up"] + argv
     elif argv and argv[0] in {"-v", "--version"}:
-        argv = ["version"]
+        argv = ["--print-version"]
     args = parser.parse_args(argv)
+
+    if getattr(args, "print_version", False):
+        print(f"v{VERSION}")
+        return 0
 
     if not args.command:
         parser.print_help()
