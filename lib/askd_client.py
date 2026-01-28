@@ -175,6 +175,18 @@ def try_daemon_request(
     read_state = getattr(daemon_module, "read_state")
 
     st = read_state(state_file=state_file)
+
+    # If state not found and CCB_RUN_DIR is set, try project-specific state file
+    # This fixes background mode where env vars may not be inherited
+    if not st:
+        run_dir = os.environ.get("CCB_RUN_DIR", "").strip()
+        if run_dir:
+            # State file name is derived from protocol_prefix (e.g., cask -> caskd.json)
+            state_filename = f"{spec.protocol_prefix}d.json"
+            project_state = Path(run_dir) / state_filename
+            if project_state.exists():
+                st = read_state(state_file=project_state)
+
     if not st:
         return None
     try:
