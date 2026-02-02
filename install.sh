@@ -108,6 +108,7 @@ SCRIPTS_TO_LINK=(
   bin/pend
   bin/autonew
   bin/ccb-completion-hook
+  bin/maild
   ccb
 )
 
@@ -466,6 +467,8 @@ copy_project() {
       --exclude '.pytest_cache/' \
       --exclude '.mypy_cache/' \
       --exclude '.venv/' \
+      --exclude 'lib/web/' \
+      --exclude 'bin/ccb-web' \
       "$REPO_ROOT"/ "$staging"/
   else
     tar -C "$REPO_ROOT" \
@@ -474,6 +477,8 @@ copy_project() {
       --exclude '.pytest_cache' \
       --exclude '.mypy_cache' \
       --exclude '.venv' \
+      --exclude 'lib/web' \
+      --exclude 'bin/ccb-web' \
       -cf - . | tar -C "$staging" -xf -
   fi
 

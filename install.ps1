@@ -34,7 +34,7 @@ $script:SCRIPTS_TO_LINK = @(
   "oask", "opend", "oping",
   "lask", "lpend", "lping",
   "dask", "dpend", "dping",
-  "ask", "ping", "pend", "autonew", "ccb-completion-hook"
+  "ask", "ping", "pend", "autonew", "ccb-completion-hook", "maild"
 )
 
 $script:CLAUDE_MARKDOWN = @(
@@ -216,6 +216,12 @@ function Install-Native {
     }
   }
 
+  # Exclude web UI code from installation (CLI-only mail setup)
+  $webDir = Join-Path $InstallPrefix "lib\\web"
+  if (Test-Path $webDir) { Remove-Item -Recurse -Force $webDir }
+  $ccbWeb = Join-Path $InstallPrefix "bin\\ccb-web"
+  if (Test-Path $ccbWeb) { Remove-Item -Force $ccbWeb }
+
   function Fix-PythonShebang {
     param([string]$TargetPath)
     if (-not $TargetPath -or -not (Test-Path $TargetPath)) { return }
@@ -237,7 +243,7 @@ function Install-Native {
     "oask", "oping", "opend",
     "lask", "lping", "lpend",
     "dask", "dping", "dpend",
-    "ask", "ping", "pend", "autonew", "ccb-completion-hook"
+    "ask", "ping", "pend", "autonew", "ccb-completion-hook", "maild"
   )
 
   # In MSYS/Git-Bash, invoking the script file directly will honor the shebang.
