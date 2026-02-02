@@ -1,6 +1,6 @@
 <div align="center">
 
-# Claude Code Bridge (ccb) v5.1.3
+# Claude Code Bridge (ccb) v5.2.0
 
 **New Multi-Model Collaboration Tool via Split-Pane Terminal**
 **Claude & Codex & Gemini & OpenCode & Droid**
@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/Every_Model_Controllable-CF1322?style=for-the-badge" alt="Every Model Controllable">
 </p>
 
-[![Version](https://img.shields.io/badge/version-5.1.3-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-5.2.0-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/bfly123/claude_code_bridge/actions/workflows/test.yml/badge.svg)](https://github.com/bfly123/claude_code_bridge/actions/workflows/test.yml)
@@ -50,6 +50,21 @@
 <h2 align="center">🚀 What's New</h2>
 
 <details open>
+<summary><b>v5.2.0</b> - Email Integration for Remote AI Access</summary>
+
+**📧 New Feature: Mail Service**
+- **Email-to-AI Gateway**: Send emails to interact with AI providers remotely
+- **Multi-Provider Support**: Gmail, Outlook, QQ, 163 mail presets
+- **Provider Routing**: Use body prefix to target specific AI (e.g., `CLAUDE: your question`)
+- **Real-time Polling**: IMAP IDLE support for instant email detection
+- **Secure Credentials**: System keyring integration for password storage
+- **Mail Daemon**: Background service (`maild`) for continuous email monitoring
+
+See [Mail System Configuration](#-mail-system-configuration) for setup instructions.
+
+</details>
+
+<details>
 <summary><b>v5.1.3</b> - Tmux Claude Ask Stability</summary>
 
 **🔧 Fixes & Improvements:**
@@ -577,7 +592,138 @@ When to use:
 
 ---
 
-## 🖥️ Editor Integration: Neovim + Multi-AI Review
+## 📧 Mail System Configuration
+
+The mail system allows you to interact with AI providers via email, enabling remote access when you're away from your terminal.
+
+### How It Works
+
+1. **Send an email** to your CCB service mailbox
+2. **Specify the AI provider** using a prefix in the email body (e.g., `CLAUDE: your question`)
+3. **CCB routes the request** to the specified AI provider via the ASK system
+4. **Receive the response** via email reply
+
+### Quick Setup
+
+**Step 1: Run the configuration wizard**
+```bash
+maild setup
+```
+
+**Step 2: Choose your email provider**
+- Gmail
+- Outlook
+- QQ Mail
+- 163 Mail
+- Custom IMAP/SMTP
+
+**Step 3: Enter credentials**
+- Service email address (CCB's mailbox)
+- App password (not your regular password - see provider-specific instructions below)
+- Target email (where to send replies)
+
+**Step 4: Start the mail daemon**
+```bash
+maild start
+```
+
+### Configuration File
+
+Configuration is stored in `~/.ccb/mail/config.json`:
+
+```json
+{
+  "version": 3,
+  "enabled": true,
+  "service_account": {
+    "provider": "gmail",
+    "email": "your-ccb-service@gmail.com",
+    "imap": {"host": "imap.gmail.com", "port": 993, "ssl": true},
+    "smtp": {"host": "smtp.gmail.com", "port": 587, "starttls": true}
+  },
+  "target_email": "your-phone@example.com",
+  "default_provider": "claude",
+  "polling": {
+    "use_idle": true,
+    "idle_timeout": 300
+  }
+}
+```
+
+### Provider-Specific Setup
+
+<details>
+<summary><b>Gmail</b></summary>
+
+1. Enable 2-Step Verification in your Google Account
+2. Go to [App Passwords](https://myaccount.google.com/apppasswords)
+3. Generate a new app password for "Mail"
+4. Use this 16-character password (not your Google password)
+
+</details>
+
+<details>
+<summary><b>Outlook / Office 365</b></summary>
+
+1. Enable 2-Step Verification in your Microsoft Account
+2. Go to [Security > App Passwords](https://account.live.com/proofs/AppPassword)
+3. Generate a new app password
+4. Use this password for CCB mail configuration
+
+</details>
+
+<details>
+<summary><b>QQ Mail</b></summary>
+
+1. Log in to QQ Mail web interface
+2. Go to Settings > Account
+3. Enable IMAP/SMTP service
+4. Generate an authorization code (授权码)
+5. Use this authorization code as the password
+
+</details>
+
+<details>
+<summary><b>163 Mail</b></summary>
+
+1. Log in to 163 Mail web interface
+2. Go to Settings > POP3/SMTP/IMAP
+3. Enable IMAP service
+4. Set an authorization password (客户端授权密码)
+5. Use this authorization password for CCB
+
+</details>
+
+### Email Format
+
+**Basic format:**
+```
+Subject: Any subject (ignored)
+Body:
+CLAUDE: What is the weather like today?
+```
+
+**Supported provider prefixes:**
+- `CLAUDE:` or `claude:` - Route to Claude
+- `CODEX:` or `codex:` - Route to Codex
+- `GEMINI:` or `gemini:` - Route to Gemini
+- `OPENCODE:` or `opencode:` - Route to OpenCode
+- `DROID:` or `droid:` - Route to Droid
+
+If no prefix is specified, the request goes to the `default_provider` (default: `claude`).
+
+### Mail Daemon Commands
+
+```bash
+maild start          # Start the mail daemon
+maild stop           # Stop the mail daemon
+maild status         # Check daemon status
+maild config         # Show current configuration
+maild setup          # Run configuration wizard
+maild test           # Test email connectivity
+```
+
+---
 
 <img src="assets/nvim.png" alt="Neovim integration with multi-AI code review" width="900">
 

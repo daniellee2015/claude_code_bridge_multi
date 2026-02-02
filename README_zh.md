@@ -1,6 +1,6 @@
 <div align="center">
 
-# Claude Code Bridge (ccb) v5.1.2
+# Claude Code Bridge (ccb) v5.2.0
 
 **基于终端分屏的全新多模型交互协作工具**
 **Claude & Codex & Gemini & OpenCode & Droid**
@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/模型皆可控-CF1322?style=for-the-badge" alt="模型皆可控">
 </p>
 
-[![Version](https://img.shields.io/badge/version-5.1.3-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-5.2.0-orange.svg)]()
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
 
 [English](README.md) | **中文**
@@ -51,6 +51,21 @@
 <h2 align="center">🚀 新版本速览</h2>
 
 <details open>
+<summary><b>v5.2.0</b> - 邮件集成，远程访问 AI</summary>
+
+**📧 新功能：邮件服务**
+- **邮件转 AI 网关**：通过发送邮件与 AI 交互，支持远程访问
+- **多邮箱支持**：Gmail、Outlook、QQ 邮箱、163 邮箱预设
+- **Provider 路由**：邮件正文前缀指定 AI（如 `CLAUDE: 你的问题`）
+- **实时轮询**：支持 IMAP IDLE 即时检测新邮件
+- **安全凭据**：密码存储在系统 keyring 中
+- **邮件守护进程**：后台服务 (`maild`) 持续监控邮件
+
+详见 [邮件系统配置](#-邮件系统配置) 了解设置方法。
+
+</details>
+
+<details>
 <summary><b>v5.1.2</b> - Daemon 与 Hook 稳定性</summary>
 
 **🔧 修复与改进：**
@@ -557,6 +572,139 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile
 - 支持 `CCB_CALLER` 指定回调目标 (claude/codex/droid)
 - 支持 tmux 和 WezTerm 两种终端后端
  - 前台 ask 默认关闭 hook，除非设置 `CCB_COMPLETION_HOOK_ENABLED`
+
+---
+
+## 📧 邮件系统配置
+
+邮件系统允许你通过电子邮件与 AI 交互，即使不在终端前也能远程访问。
+
+### 工作原理
+
+1. **发送邮件** 到 CCB 服务邮箱
+2. **指定 AI Provider**：在邮件正文使用前缀（如 `CLAUDE: 你的问题`）
+3. **CCB 路由请求** 到指定的 AI Provider
+4. **通过邮件回复** 接收 AI 响应
+
+### 快速设置
+
+**第一步：运行配置向导**
+```bash
+maild setup
+```
+
+**第二步：选择邮箱服务商**
+- Gmail
+- Outlook
+- QQ 邮箱
+- 163 邮箱
+- 自定义 IMAP/SMTP
+
+**第三步：输入凭据**
+- 服务邮箱地址（CCB 的邮箱）
+- 应用专用密码（不是普通密码，见下方各服务商说明）
+- 目标邮箱（接收回复的邮箱）
+
+**第四步：启动邮件守护进程**
+```bash
+maild start
+```
+
+### 配置文件
+
+配置存储在 `~/.ccb/mail/config.json`：
+
+```json
+{
+  "version": 3,
+  "enabled": true,
+  "service_account": {
+    "provider": "qq",
+    "email": "your-ccb-service@qq.com",
+    "imap": {"host": "imap.qq.com", "port": 993, "ssl": true},
+    "smtp": {"host": "smtp.qq.com", "port": 465, "ssl": true}
+  },
+  "target_email": "your-phone@example.com",
+  "default_provider": "claude",
+  "polling": {
+    "use_idle": true,
+    "idle_timeout": 300
+  }
+}
+```
+
+### 各邮箱服务商设置
+
+<details>
+<summary><b>Gmail</b></summary>
+
+1. 在 Google 账户中启用两步验证
+2. 访问 [应用专用密码](https://myaccount.google.com/apppasswords)
+3. 为"邮件"生成新的应用专用密码
+4. 使用这个 16 位密码（不是 Google 密码）
+
+</details>
+
+<details>
+<summary><b>Outlook / Office 365</b></summary>
+
+1. 在 Microsoft 账户中启用两步验证
+2. 访问 [安全 > 应用密码](https://account.live.com/proofs/AppPassword)
+3. 生成新的应用密码
+4. 使用此密码配置 CCB 邮件
+
+</details>
+
+<details>
+<summary><b>QQ 邮箱</b></summary>
+
+1. 登录 QQ 邮箱网页版
+2. 进入 设置 > 账户
+3. 开启 IMAP/SMTP 服务
+4. 生成授权码
+5. 使用授权码作为密码
+
+</details>
+
+<details>
+<summary><b>163 邮箱</b></summary>
+
+1. 登录 163 邮箱网页版
+2. 进入 设置 > POP3/SMTP/IMAP
+3. 开启 IMAP 服务
+4. 设置客户端授权密码
+5. 使用授权密码配置 CCB
+
+</details>
+
+### 邮件格式
+
+**基本格式：**
+```
+主题：任意（会被忽略）
+正文：
+CLAUDE: 今天天气怎么样？
+```
+
+**支持的 Provider 前缀：**
+- `CLAUDE:` 或 `claude:` - 路由到 Claude
+- `CODEX:` 或 `codex:` - 路由到 Codex
+- `GEMINI:` 或 `gemini:` - 路由到 Gemini
+- `OPENCODE:` 或 `opencode:` - 路由到 OpenCode
+- `DROID:` 或 `droid:` - 路由到 Droid
+
+如果没有指定前缀，请求会发送到 `default_provider`（默认：`claude`）。
+
+### 邮件守护进程命令
+
+```bash
+maild start          # 启动邮件守护进程
+maild stop           # 停止邮件守护进程
+maild status         # 查看守护进程状态
+maild config         # 查看当前配置
+maild setup          # 运行配置向导
+maild test           # 测试邮件连接
+```
 
 ---
 
