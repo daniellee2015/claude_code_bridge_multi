@@ -4,7 +4,7 @@
 
 ## Overview
 
-**Goal**: Enforce strict per-directory daemon isolation (anchored by `.ccb_config` in the current working directory) and improve IPC/process stability without breaking current CLI workflows.
+**Goal**: Enforce strict per-directory daemon isolation (anchored by `.ccb` in the current working directory) and improve IPC/process stability without breaking current CLI workflows.
 
 **Readiness Score**: 61/100
 
@@ -15,11 +15,11 @@
 ## Requirements Summary
 
 ### Problem Statement
-Current caskd/gaskd/oaskd/laskd IPC is unstable and risks cross-project routing. The system must isolate communication strictly by each current-directory anchor (`.ccb_config` directory) and improve daemon stability.
+Current caskd/gaskd/oaskd/laskd IPC is unstable and risks cross-project routing. The system must isolate communication strictly by each current-directory anchor (`.ccb` directory) and improve daemon stability.
 
 ### Scope
 In scope:
-- Project anchor resolution based on current directory `.ccb_config` only (no ancestor inheritance).
+- Project anchor resolution based on current directory `.ccb` only (no ancestor inheritance).
 - Per-project daemon runtime (state/log/lock) and project-scoped locking.
 - Request validation using `project_id` and `project_root`.
 - Unified retries, stale state cleanup, heartbeat liveness checks.
@@ -41,11 +41,11 @@ Out of scope (phase 2 or later):
 - Cross-platform support (Linux/macOS/Windows/WSL).
 - Preserve existing CLI UX where possible.
 - No ancestor anchor inheritance; subdirectories must be treated as independent project roots.
-- If a parent directory has `.ccb_config`, auto-create is blocked and user must create a local `.ccb_config` manually.
+- If a parent directory has `.ccb`, auto-create is blocked and user must create a local `.ccb` manually.
 - Only one `ccb` instance may run per directory; a second instance must fail fast with a clear error.
 
 ### Assumptions
-- `.ccb_config` exists in each working directory used with `ccb` (nested anchors allowed) and is writable by the user.
+- `.ccb` exists in each working directory used with `ccb` (nested anchors allowed) and is writable by the user.
 - Users accept per-project daemon processes tied to the `ccb` lifecycle (idle timeout disabled when launched by `ccb`).
 - Cache directory (`~/.cache/ccb`) is available for runtime storage by default.
 
@@ -54,22 +54,22 @@ Out of scope (phase 2 or later):
 ## Architecture
 
 ### Approach
-- **Anchor-based isolation**: resolve `project_root` from the current directory `.ccb_config` only (no upward traversal) and compute `project_id` (SHA256, truncated to 16 hex chars for paths).
+- **Anchor-based isolation**: resolve `project_root` from the current directory `.ccb` only (no upward traversal) and compute `project_id` (SHA256, truncated to 16 hex chars for paths).
 - **Per-project daemons**: each project runs its own caskd/gaskd/oaskd/laskd instances.
-- **Project-scoped runtime**: default run_dir is `~/.cache/ccb/projects/<project_id>/<provider>/`; optional project-local mode uses `<project_root>/.ccb_config/run/<provider>/` when `CCB_RUN_DIR_MODE=project` or cache is not writable.
+- **Project-scoped runtime**: default run_dir is `~/.cache/ccb/projects/<project_id>/<provider>/`; optional project-local mode uses `<project_root>/.ccb/run/<provider>/` when `CCB_RUN_DIR_MODE=project` or cache is not writable.
 - **Validation handshake**: state file includes `project_id`, `project_root`, `protocol_version`, `pid`, `started_at`, and `heartbeat` (timestamp + monotonic counter). Client rejects mismatched state and server rejects mismatched requests.
 - **Registry**: keep global registry (`~/.ccb/run/`) but enforce strict `project_id` matching.
 - **Lifecycle**: disable idle timeout for daemons launched by `ccb`; track `parent_pid` and shut down when `ccb` exits.
 
 ### Key Components
-- **Current-Dir Anchor Resolver**: returns `project_root` and `project_id` only when `.ccb_config` exists in the current working directory.
+- **Current-Dir Anchor Resolver**: returns `project_root` and `project_id` only when `.ccb` exists in the current working directory.
 - **Project-Scoped Runtime (askd_runtime)**: computes run_dir and state/log paths per project.
 - **Daemon Lifecycle Manager**: startup lock, graceful shutdown, heartbeat updates.
 - **Request Guardrails**: per-request project_id validation, optional ACK + dedup.
 - **Migration Handler**: detects legacy state and migrates or honors legacy mode.
 
 ### Data Flow
-1. CLI checks `.ccb_config` in the current working directory; if missing and no parent anchor exists, auto-create; if a parent anchor exists, error and instruct manual creation.
+1. CLI checks `.ccb` in the current working directory; if missing and no parent anchor exists, auto-create; if a parent anchor exists, error and instruct manual creation.
 2. CLI sets `project_root = cwd` and computes `project_id`.
 3. CLI computes project run_dir, reads state file, validates `project_id`/`project_root`.
 4. If invalid or stale, CLI cleans state and autostarts project-scoped daemon (with `parent_pid` set to the `ccb` process).
@@ -83,8 +83,8 @@ Out of scope (phase 2 or later):
 ## Implementation Plan
 
 ### Step 1: Anchor Resolution + Session Lookup
-- **Actions**: add shared helper to resolve `.ccb_config` in the current directory only; remove parent-anchor fallback; update `ccb` init to auto-create only when no parent anchor exists and otherwise error with guidance to create local `.ccb_config`; update `session_utils.find_project_session_file` and `claude_session_resolver` to use current-dir anchor only.
-- **Deliverables**: unified project_root/project_id helper (cwd-only); session lookup anchored to current directory `.ccb_config`.
+- **Actions**: add shared helper to resolve `.ccb` in the current directory only; remove parent-anchor fallback; update `ccb` init to auto-create only when no parent anchor exists and otherwise error with guidance to create local `.ccb`; update `session_utils.find_project_session_file` and `claude_session_resolver` to use current-dir anchor only.
+- **Deliverables**: unified project_root/project_id helper (cwd-only); session lookup anchored to current directory `.ccb`.
 - **Dependencies**: none.
 
 ### Step 2: Project-Scoped Runtime + Locks
@@ -108,7 +108,7 @@ Out of scope (phase 2 or later):
 - **Dependencies**: Steps 3-4.
 
 ### Step 6: Migration + Backward Compatibility
-- **Actions**: detect legacy global state files; honor `CCB_LEGACY_GLOBAL_DAEMON=1`; add one-time migration warning marker (`~/.cache/ccb/.migration_warned`); implement `ccb migrate` (all providers, optional `--provider`); if parent `.ccb_config` exists and current dir has none, error and instruct manual creation of local `.ccb_config`.
+- **Actions**: detect legacy global state files; honor `CCB_LEGACY_GLOBAL_DAEMON=1`; add one-time migration warning marker (`~/.cache/ccb/.migration_warned`); implement `ccb migrate` (all providers, optional `--provider`); if parent `.ccb` exists and current dir has none, error and instruct manual creation of local `.ccb`.
 - **Deliverables**: migration path with legacy fallback.
 - **Dependencies**: Steps 1-5.
 
@@ -180,5 +180,5 @@ Assumptions & Gaps:
 
 ### Alternative Approaches Considered
 - Keep global per-provider daemon with stricter session_key routing only (rejected due to continued cross-project risk).
-- Inherit parent `.ccb_config` anchors for subdirectories (rejected per user requirement).
+- Inherit parent `.ccb` anchors for subdirectories (rejected per user requirement).
 - Switch default IPC to Unix sockets/Named Pipes (deferred to Phase 2 for cross-platform complexity).

@@ -56,7 +56,7 @@ def _debug_enabled() -> bool:
 def main(argv: list[str]) -> int:
     try:
         parser = argparse.ArgumentParser(prog="opend", add_help=True)
-        parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .opencode-session (or .ccb_config/.opencode-session)")
+        parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .opencode-session (or .ccb/.opencode-session)")
         args = parser.parse_args(argv[1:])
 
         from askd_client import resolve_work_dir_with_registry

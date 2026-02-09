@@ -34,18 +34,23 @@ check_session() {
     local session_file
 
     case "$name" in
-        claude)  session_file="$PWD/.ccb_config/.claude-session" ;;
-        codex)   session_file="$PWD/.ccb_config/.codex-session" ;;
-        gemini)  session_file="$PWD/.ccb_config/.gemini-session" ;;
-        opencode) session_file="$PWD/.ccb_config/.opencode-session" ;;
-        droid)   session_file="$PWD/.ccb_config/.droid-session" ;;
+        claude)  session_file="$PWD/.ccb/.claude-session" ;;
+        codex)   session_file="$PWD/.ccb/.codex-session" ;;
+        gemini)  session_file="$PWD/.ccb/.gemini-session" ;;
+        opencode) session_file="$PWD/.ccb/.opencode-session" ;;
+        droid)   session_file="$PWD/.ccb/.droid-session" ;;
     esac
 
-    # Backwards compatibility: older versions stored session files in project root.
+    # Backwards compatibility: legacy config dir or root-level session file.
     if [[ -n "$session_file" && ! -f "$session_file" ]]; then
-        local legacy="${session_file/.ccb_config\\//}"
-        if [[ -f "$legacy" ]]; then
-            session_file="$legacy"
+        local legacy_dir="${session_file/.ccb\\//.ccb_config/}"
+        if [[ -f "$legacy_dir" ]]; then
+            session_file="$legacy_dir"
+        else
+            local legacy="${session_file/.ccb\\//}"
+            if [[ -f "$legacy" ]]; then
+                session_file="$legacy"
+            fi
         fi
     fi
 

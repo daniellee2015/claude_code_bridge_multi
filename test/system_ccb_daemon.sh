@@ -27,9 +27,9 @@ GEMINI_ROOT="${TEST_DIR1}/_gemini_tmp"
 STUB_DELAY="1.0"
 
 mkdir -p "${STUB_BIN}" "${GEMINI_ROOT}"
-mkdir -p "${PROJ_A}/.ccb_config" "${PROJ_B}/.ccb_config"
-mkdir -p "${LOCK_DIR}/.ccb_config"
-mkdir -p "${ANCHOR_PARENT}/.ccb_config" "${ANCHOR_CHILD}"
+mkdir -p "${PROJ_A}/.ccb" "${PROJ_B}/.ccb"
+mkdir -p "${LOCK_DIR}/.ccb"
+mkdir -p "${ANCHOR_PARENT}/.ccb" "${ANCHOR_CHILD}"
 
 cat >"${STUB_BIN}/codex" <<'EOF'
 #!/usr/bin/env bash
@@ -271,10 +271,10 @@ start_tmux "${SESSION_B}" \
   \"${ROOT}/ccb\" gemini \
   >\"${PROJ_B}/ccb.out\" 2>\"${PROJ_B}/ccb.err\""
 
-if ! wait_for_file "${PROJ_A}/.ccb_config/.gemini-session" 10; then
+if ! wait_for_file "${PROJ_A}/.ccb/.gemini-session" 10; then
   fail "gemini session file A"
 fi
-if ! wait_for_file "${PROJ_B}/.ccb_config/.gemini-session" 10; then
+if ! wait_for_file "${PROJ_B}/.ccb/.gemini-session" 10; then
   fail "gemini session file B"
 fi
 
@@ -315,7 +315,7 @@ else
   fail "gaskd state B"
 fi
 
-PROJECT_ID_A="$("${PYTHON}" - "${PROJ_A}/.ccb_config/.gemini-session" <<'PY'
+PROJECT_ID_A="$("${PYTHON}" - "${PROJ_A}/.ccb/.gemini-session" <<'PY'
 import json
 import sys
 with open(sys.argv[1], "r", encoding="utf-8") as handle:
@@ -323,7 +323,7 @@ with open(sys.argv[1], "r", encoding="utf-8") as handle:
 print(data.get("ccb_project_id", ""))
 PY
 )"
-PROJECT_ID_B="$("${PYTHON}" - "${PROJ_B}/.ccb_config/.gemini-session" <<'PY'
+PROJECT_ID_B="$("${PYTHON}" - "${PROJ_B}/.ccb/.gemini-session" <<'PY'
 import json
 import sys
 with open(sys.argv[1], "r", encoding="utf-8") as handle:

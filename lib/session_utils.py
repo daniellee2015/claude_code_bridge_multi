@@ -8,11 +8,25 @@ from pathlib import Path
 from typing import Tuple, Optional
 
 
-CCB_PROJECT_CONFIG_DIRNAME = ".ccb_config"
+CCB_PROJECT_CONFIG_DIRNAME = ".ccb"
+CCB_PROJECT_CONFIG_LEGACY_DIRNAME = ".ccb_config"
 
 
 def project_config_dir(work_dir: Path) -> Path:
     return Path(work_dir).resolve() / CCB_PROJECT_CONFIG_DIRNAME
+
+
+def legacy_project_config_dir(work_dir: Path) -> Path:
+    return Path(work_dir).resolve() / CCB_PROJECT_CONFIG_LEGACY_DIRNAME
+
+
+def resolve_project_config_dir(work_dir: Path) -> Path:
+    """Return primary config dir if present; otherwise legacy if it exists."""
+    primary = project_config_dir(work_dir)
+    legacy = legacy_project_config_dir(work_dir)
+    if primary.is_dir() or not legacy.is_dir():
+        return primary
+    return legacy
 
 
 def check_session_writable(session_file: Path) -> Tuple[bool, Optional[str], Optional[str]]:
@@ -130,13 +144,17 @@ def find_project_session_file(work_dir: Path, session_filename: str) -> Optional
     Find a session file for the given work_dir.
 
     Lookup is local-only (no upward traversal):
-      1) <work_dir>/.ccb_config/<session_filename>
-      2) <work_dir>/<session_filename>  (legacy)
+      1) <work_dir>/.ccb/<session_filename>
+      2) <work_dir>/.ccb_config/<session_filename>  (legacy)
+      3) <work_dir>/<session_filename>  (legacy)
     """
     current = Path(work_dir).resolve()
     candidate = current / CCB_PROJECT_CONFIG_DIRNAME / session_filename
     if candidate.exists():
         return candidate
+    legacy_candidate = current / CCB_PROJECT_CONFIG_LEGACY_DIRNAME / session_filename
+    if legacy_candidate.exists():
+        return legacy_candidate
     legacy = current / session_filename
     if legacy.exists():
         return legacy

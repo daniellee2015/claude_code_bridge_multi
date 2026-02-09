@@ -21,7 +21,7 @@ try:
     def main():
         try:
             parser = argparse.ArgumentParser(prog="dping", add_help=True)
-            parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .droid-session (or .ccb_config/.droid-session)")
+            parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .droid-session (or .ccb/.droid-session)")
             args = parser.parse_args()
             if args.session_file:
                 os.environ["CCB_SESSION_FILE"] = str(args.session_file)

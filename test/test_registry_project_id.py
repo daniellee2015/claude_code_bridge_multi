@@ -46,7 +46,7 @@ def test_upsert_registry_merges_providers(tmp_path: Path, monkeypatch: pytest.Mo
             "ccb_project_id": pid,
             "work_dir": str(work_dir),
             "terminal": "tmux",
-            "providers": {"codex": {"pane_id": "%1", "session_file": str(work_dir / ".ccb_config" / ".codex-session")}},
+            "providers": {"codex": {"pane_id": "%1", "session_file": str(work_dir / ".ccb" / ".codex-session")}},
         }
     )
     assert ok1 is True
@@ -57,7 +57,7 @@ def test_upsert_registry_merges_providers(tmp_path: Path, monkeypatch: pytest.Mo
             "ccb_project_id": pid,
             "work_dir": str(work_dir),
             "terminal": "tmux",
-            "providers": {"gemini": {"pane_id": "%1", "session_file": str(work_dir / ".ccb_config" / ".gemini-session")}},
+            "providers": {"gemini": {"pane_id": "%1", "session_file": str(work_dir / ".ccb" / ".gemini-session")}},
         }
     )
     assert ok2 is True

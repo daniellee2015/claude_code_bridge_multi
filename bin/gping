@@ -20,7 +20,7 @@ try:
     def main():
         try:
             parser = argparse.ArgumentParser(prog="gping", add_help=True)
-            parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .gemini-session (or .ccb_config/.gemini-session)")
+            parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .gemini-session (or .ccb/.gemini-session)")
             args = parser.parse_args()
             if args.session_file:
                 os.environ["CCB_SESSION_FILE"] = str(args.session_file)

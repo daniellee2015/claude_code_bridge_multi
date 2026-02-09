@@ -13,10 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-# Default storage directory
-TRANSFERS_DIR = Path.home() / ".ccb" / "transfers"
-
-from session_utils import find_project_session_file
+from session_utils import find_project_session_file, legacy_project_config_dir, project_config_dir, resolve_project_config_dir
 from .types import ConversationEntry, TransferContext, SessionNotFoundError, SessionStats
 from .session_parser import ClaudeSessionParser
 from .deduper import ConversationDeduper
@@ -558,23 +555,51 @@ class ContextTransfer:
         target_provider: Optional[str] = None,
         filename: Optional[str] = None,
     ) -> Path:
-        """Save transfer to ~/.ccb/transfers/ with timestamp."""
-        TRANSFERS_DIR.mkdir(parents=True, exist_ok=True)
+        """Save transfer to ./.ccb/history/ with timestamp."""
+        history_dir = self._history_dir()
+        history_dir.mkdir(parents=True, exist_ok=True)
 
         ext = {"markdown": "md", "plain": "txt", "json": "json"}.get(fmt, "md")
         if filename:
             safe = str(filename).strip().replace("/", "-").replace("\\", "-")
             if not Path(safe).suffix:
                 safe = f"{safe}.{ext}"
-            filepath = TRANSFERS_DIR / safe
+            filepath = history_dir / safe
         else:
-            # Generate filename: YYYYMMDD-HHMMSS-{session_id}-to-{provider}.md
+            # Generate filename: {source}-YYYYMMDD-HHMMSS-{session_id}[-to-{provider}].md
             ts = datetime.now().strftime("%Y%m%d-%H%M%S")
             session_short = context.source_session_id[:8]
+            source_provider = (context.source_provider or context.metadata.get("provider") or "session").strip().lower()
+            if not source_provider:
+                source_provider = "session"
+            source_provider = source_provider.replace("/", "-").replace("\\", "-")
             provider_suffix = f"-to-{target_provider}" if target_provider else ""
-            filepath = TRANSFERS_DIR / f"{ts}-{session_short}{provider_suffix}.{ext}"
+            filepath = history_dir / f"{source_provider}-{ts}-{session_short}{provider_suffix}.{ext}"
 
         formatted = self.format_output(context, fmt)
         filepath.write_text(formatted, encoding="utf-8")
 
         return filepath
+
+    def _history_dir(self) -> Path:
+        """Resolve local history directory under the project config dir."""
+        try:
+            work_dir = Path(self.work_dir).expanduser()
+        except Exception:
+            work_dir = Path.cwd()
+
+        primary = project_config_dir(work_dir)
+        legacy = legacy_project_config_dir(work_dir)
+
+        if not primary.exists() and legacy.is_dir():
+            try:
+                legacy.replace(primary)
+            except Exception:
+                base = legacy
+            else:
+                base = primary
+        else:
+            base = resolve_project_config_dir(work_dir)
+
+        base.mkdir(parents=True, exist_ok=True)
+        return base / "history"

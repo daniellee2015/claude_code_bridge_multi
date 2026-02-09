@@ -50,11 +50,27 @@
 <h2 align="center">🚀 What's New</h2>
 
 <details open>
+<summary><b>v5.2.3</b> - Project-Local History & Legacy Compatibility</summary>
+
+**📂 Project-Local History:**
+- **Local Storage**: Auto context exports now save to `./.ccb/history/` per project
+- **Safe Scope**: Auto transfer runs only for the current working directory
+- **Claude /continue**: New skill to attach the latest history file via `@`
+
+**🧩 Legacy Compatibility:**
+- **Auto Migration**: `.ccb_config` is detected and upgraded to `.ccb` when possible
+- **Fallback Lookup**: Legacy sessions still resolve cleanly during transition
+
+These changes keep handoff artifacts scoped to the project and make upgrades smoother.
+
+</details>
+
+<details>
 <summary><b>v5.2.2</b> - Session Switch Capture & Context Transfer</summary>
 
 **🔁 Session Switch Tracking:**
 - **Old Session Fields**: `.claude-session` now records `old_claude_session_id` / `old_claude_session_path` with `old_updated_at`
-- **Auto Context Export**: Previous Claude session is automatically extracted to `~/.ccb/transfers/claude-<timestamp>-<old_id>.md`
+- **Auto Context Export**: Previous Claude session is automatically extracted to `./.ccb/history/claude-<timestamp>-<old_id>.md`
 - **Cleaner Transfers**: Noise filtering removes protocol markers and guardrails while keeping tool-only actions
 
 These updates make session handoff more reliable and easier to audit.
@@ -386,7 +402,7 @@ Note: `ccb up` is removed; use `ccb ...` or configure `ccb.config`.
 
 ### ccb.config
 Default lookup order:
-- `.ccb_config/ccb.config` (project)
+- `.ccb/ccb.config` (project)
 - `~/.ccb/ccb.config` (global)
 
 Simple format (recommended):
@@ -815,7 +831,7 @@ ccb reinstall
 - **CCA Status Bar**: CCA label now reads role name from `.autoflow/roles.json` (supports `_meta.name`) and caches per path.
 - **Installer**: Copy skill subdirectories (e.g., `references/`) for Claude/Codex installs.
 - **CLI**: Added `ccb uninstall` / `ccb reinstall` with Claude config cleanup.
-- **Routing**: Tighter project/session resolution (prefer `.ccb_config` anchor; avoid cross-project Claude session mismatches).
+- **Routing**: Tighter project/session resolution (prefer `.ccb` anchor; avoid cross-project Claude session mismatches).
 
 ### v5.0.0
 - **Claude Independence**: No need to start Claude first; Codex (or any agent) can be the primary CLI
@@ -846,7 +862,7 @@ ccb reinstall
 - **Codex Skills**: update `oask/gask` skills to wait silently with `--sync`
 
 ### v4.0.9
-- **Project_ID Simplification**: `ccb_project_id` uses current-directory `.ccb_config/` anchor (no ancestor traversal, no git dependency)
+- **Project_ID Simplification**: `ccb_project_id` uses current-directory `.ccb/` anchor (no ancestor traversal, no git dependency)
 - **Codex Skills Stability**: Codex `oask/gask` skills default to waiting (`--timeout -1`) to avoid sending the next task too early
 
 ### v4.0.8
@@ -869,7 +885,7 @@ ccb reinstall
 - **Fix**: Auto-repair duplicate `[projects.\"...\"]` entries in `~/.codex/config.toml` before starting Codex
 
 ### v4.0.3
-- **Project Cleanliness**: Store session files under `.ccb_config/` (fallback to legacy root dotfiles)
+- **Project Cleanliness**: Store session files under `.ccb/` (fallback to legacy root dotfiles)
 - **Claude Code Reliability**: `cask/gask/oask` support `--session-file` / `CCB_SESSION_FILE` to bypass wrong `cwd`
 - **Codex Config Safety**: Write auto-approval settings into a CCB-marked block to avoid config conflicts
 

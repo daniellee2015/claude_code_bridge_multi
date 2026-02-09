@@ -41,7 +41,7 @@ def _debug(message: str) -> None:
 
 
 def _load_session_path(work_dir: Path) -> Path | None:
-    """Load gemini_session_path from .gemini-session (or .ccb_config/.gemini-session) if exists"""
+    """Load gemini_session_path from .gemini-session (or .ccb/.gemini-session) if exists"""
     session_file = find_project_session_file(work_dir, ".gemini-session")
     if not session_file:
         return None
@@ -86,7 +86,7 @@ def main(argv: list[str]) -> int:
     try:
         parser = argparse.ArgumentParser(prog="gpend", add_help=True)
         parser.add_argument("n", nargs="?", type=int, default=1, help="Show the latest N conversations")
-        parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .gemini-session (or .ccb_config/.gemini-session)")
+        parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .gemini-session (or .ccb/.gemini-session)")
         args = parser.parse_args(argv[1:])
 
         n = max(1, int(args.n or 1))

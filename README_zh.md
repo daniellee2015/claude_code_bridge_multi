@@ -51,11 +51,27 @@
 <h2 align="center">🚀 新版本速览</h2>
 
 <details open>
+<summary><b>v5.2.3</b> - 项目内历史记录 & 旧目录兼容</summary>
+
+**📂 项目内历史记录：**
+- **本地存储**：自动导出改为写入 `./.ccb/history/`
+- **范围收敛**：仅对当前工作目录触发自动迁移/导出
+- **Claude /continue**：新增技能，直接 `@` 最新历史文件
+
+**🧩 旧目录兼容：**
+- **自动迁移**：检测到 `.ccb_config` 时自动升级为 `.ccb`
+- **兼容查找**：过渡期仍可解析旧目录内的会话
+
+这些更新让交接文件只留在项目内，升级路径更平滑。
+
+</details>
+
+<details>
 <summary><b>v5.2.2</b> - 会话切换跟踪 & 自动提取</summary>
 
 **🔁 会话切换跟踪：**
 - **上一条会话字段**：`.claude-session` 记录 `old_claude_session_id` / `old_claude_session_path` 与 `old_updated_at`
-- **自动导出**：切换会话时自动生成 `~/.ccb/transfers/claude-<timestamp>-<old_id>.md`
+- **自动导出**：切换会话时自动生成 `./.ccb/history/claude-<timestamp>-<old_id>.md`
 - **内容去噪**：过滤协议标记/护栏，保留工具调用摘要
 
 这些更新让会话交接更可靠、更易追踪。
@@ -342,7 +358,7 @@ tmux 提示：CCB 的 tmux 状态栏/窗格标题主题只会在 CCB 运行期�
 
 ### ccb.config
 默认查找顺序：
-- `.ccb_config/ccb.config`（项目级）
+- `.ccb/ccb.config`（项目级）
 - `~/.ccb/ccb.config`（全局）
 
 推荐的简化格式：
@@ -764,7 +780,7 @@ ccb reinstall
 - **CCA 状态栏**：从 `.autoflow/roles.json` 读取角色名（支持 `_meta.name`），并按路径缓存。
 - **安装器**：安装技能时复制子目录（如 `references/`）。
 - **CLI**：新增 `ccb uninstall` / `ccb reinstall`，并清理 Claude 配置。
-- **路由**：项目/会话解析更严格（优先 `.ccb_config`，避免跨项目 Claude 会话）。
+- **路由**：项目/会话解析更严格（优先 `.ccb`，避免跨项目 Claude 会话）。
 
 ### v5.0.0
 - **解除依赖**：无需先启动 Claude，Codex 也可以作为主 CLI

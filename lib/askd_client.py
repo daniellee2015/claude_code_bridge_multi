@@ -12,7 +12,12 @@ from typing import Optional, Tuple
 
 from env_utils import env_bool
 from providers import ProviderClientSpec
-from session_utils import find_project_session_file
+from session_utils import (
+    CCB_PROJECT_CONFIG_DIRNAME,
+    CCB_PROJECT_CONFIG_LEGACY_DIRNAME,
+    find_project_session_file,
+    resolve_project_config_dir,
+)
 from project_id import compute_ccb_project_id
 from pane_registry import load_registry_by_project_id
 
@@ -60,9 +65,10 @@ def resolve_work_dir(
     if not session_path.is_file():
         raise ValueError(f"Session file must be a file: {session_path}")
 
-    # New layout: session files live under `<project>/.ccb_config/<session_filename>`.
-    # In that case work_dir is the parent directory of `.ccb_config/`.
-    if session_path.parent.name == ".ccb_config":
+    # New layout: session files live under `<project>/.ccb/<session_filename>`.
+    # Legacy layout: `.ccb_config/` may exist for older installs.
+    # In that case work_dir is the parent directory of the config dir.
+    if session_path.parent.name in (CCB_PROJECT_CONFIG_DIRNAME, CCB_PROJECT_CONFIG_LEGACY_DIRNAME):
         return session_path.parent.parent, session_path
     return session_path.parent, session_path
 
@@ -119,7 +125,11 @@ def resolve_work_dir_with_registry(
                     if found:
                         session_file = str(found)
                     else:
-                        session_file = str(Path(wd.strip()) / ".ccb_config" / spec.session_filename)
+                        try:
+                            cfg_dir = resolve_project_config_dir(Path(wd.strip()))
+                        except Exception:
+                            cfg_dir = Path(wd.strip()) / CCB_PROJECT_CONFIG_DIRNAME
+                        session_file = str(cfg_dir / spec.session_filename)
             if session_file:
                 try:
                     return resolve_work_dir(

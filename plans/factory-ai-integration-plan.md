@@ -20,7 +20,7 @@ CCB needs to support Droid CLI (Factory.ai) alongside existing providers, with a
 ### Scope
 In scope:
 - New provider (Droid) in CCB provider lists and startup config.
-- Per-project session file under `.ccb_config` with Droid session binding.
+- Per-project session file under `.ccb` with Droid session binding.
 - Session reader and/or exec-mode bridge to capture replies.
 - `dask/dpend/dping` CLI commands and daemon support.
 - Commands must be callable from both Codex and Claude panes (sync/async).
@@ -53,7 +53,7 @@ Out of scope:
 
 ### Approach
 - Add a new provider adapter (droid) that follows existing CCB patterns.
-- Store a CCB-managed session file `.ccb_config/.droid-session` that binds:
+- Store a CCB-managed session file `.ccb/.droid-session` that binds:
   - CCB session id and project id
   - Droid session id
   - Session JSONL path (or exec-mode state)
@@ -63,7 +63,7 @@ Out of scope:
 
 ### Key Components
 - **Provider spec**: add `droid` to `providers.py`, start config, allowed providers, status scripts.
-- **Session file**: `.ccb_config/.droid-session` with `droid_session_id`, `droid_session_path`, `work_dir`, `terminal`, `pane_id`.
+- **Session file**: `.ccb/.droid-session` with `droid_session_id`, `droid_session_path`, `work_dir`, `terminal`, `pane_id`.
 - **Session reader**: parse JSONL in `~/.factory/sessions`, handle partial writes, bind by `session_id` and/or `cwd`.
 - **Daemon + CLI**: `daskd`, `dask`, `dpend`, `dping` mirroring existing provider commands.
 - **Registry integration**: update `pane_registry` to include `droid` provider entries.

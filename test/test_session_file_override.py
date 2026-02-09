@@ -5,7 +5,7 @@ from pathlib import Path
 
 def _make_session(tmp_path: Path, filename: str) -> Path:
     root = tmp_path / "proj"
-    cfg = root / ".ccb_config"
+    cfg = root / ".ccb"
     cfg.mkdir(parents=True)
     session = cfg / filename
     session.write_text("{}", encoding="utf-8")

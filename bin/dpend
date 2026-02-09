@@ -85,7 +85,7 @@ def main(argv: list[str]) -> int:
         parser = argparse.ArgumentParser(prog="dpend", add_help=True)
         parser.add_argument("n", nargs="?", type=int, default=1, help="Show the latest N conversations")
         parser.add_argument("--raw", action="store_true", help="Do not strip protocol/harness marker lines")
-        parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .droid-session (or .ccb_config/.droid-session)")
+        parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .droid-session (or .ccb/.droid-session)")
         args = parser.parse_args(argv[1:])
 
         n = max(1, int(args.n or 1))

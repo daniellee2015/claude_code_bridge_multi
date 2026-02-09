@@ -29,7 +29,14 @@ from terminal import TmuxBackend, WeztermBackend, detect_terminal, is_wsl, get_s
 from compat import setup_windows_encoding
 from ccb_config import get_backend_env
 from ccb_start_config import DEFAULT_PROVIDERS, ensure_default_start_config, load_start_config
-from session_utils import safe_write_session, check_session_writable, find_project_session_file
+from session_utils import (
+    check_session_writable,
+    find_project_session_file,
+    legacy_project_config_dir,
+    project_config_dir,
+    resolve_project_config_dir,
+    safe_write_session,
+)
 from pane_registry import upsert_registry
 from project_id import compute_ccb_project_id
 from providers import CASK_CLIENT_SPEC, GASK_CLIENT_SPEC, OASK_CLIENT_SPEC, LASK_CLIENT_SPEC, DASK_CLIENT_SPEC
@@ -44,9 +51,9 @@ backend_env = get_backend_env()
 if backend_env and not os.environ.get("CCB_BACKEND_ENV"):
     os.environ["CCB_BACKEND_ENV"] = backend_env
 
-VERSION = "5.2.2"
-GIT_COMMIT = "e04c8d1"
-GIT_DATE = "2026-01-29"
+VERSION = "5.2.3"
+GIT_COMMIT = "v5.2.3"
+GIT_DATE = "2026-02-09"
 
 _WIN_DRIVE_RE = re.compile(r"^[A-Za-z]:([/\\\\]|$)")
 _MNT_DRIVE_RE = re.compile(r"^/mnt/([A-Za-z])/(.*)$")
@@ -586,7 +593,7 @@ class AILauncher:
         return env
 
     def _project_config_dir(self) -> Path:
-        return self.project_root / ".ccb_config"
+        return resolve_project_config_dir(self.project_root)
 
     def _project_session_file(self, filename: str) -> Path:
         cfg = self._project_config_dir()
@@ -594,7 +601,8 @@ class AILauncher:
 
     def _migrate_legacy_project_files(self) -> None:
         """
-        Move legacy project dotfiles from the project root into `.ccb_config/`.
+        Move legacy project dotfiles from the project root into the project config dir
+        (`.ccb/` or legacy `.ccb_config/`).
 
         This keeps the project root clean while preserving backwards-compatible lookup
         (see `lib/session_utils.py:find_project_session_file`).
@@ -612,7 +620,7 @@ class AILauncher:
                 if not target.exists():
                     legacy.replace(target)
                     continue
-                # Keep both, but move the legacy one under `.ccb_config/` with a suffix.
+                # Keep both, but move the legacy one under `.ccb/` with a suffix.
                 suffix = time.strftime("%Y%m%d%H%M%S")
                 legacy.replace(cfg / f"{name}.legacy.{suffix}")
             except Exception:
@@ -1098,7 +1106,7 @@ class AILauncher:
         cfg = self._project_config_dir()
         if cfg.is_dir():
             return True
-        print("❌ Missing required project config directory: .ccb_config", file=sys.stderr)
+        print("❌ Missing required project config directory: .ccb", file=sys.stderr)
         print(f"   project_root: {self.project_root}", file=sys.stderr)
         print(f"   cwd:          {Path.cwd()}", file=sys.stderr)
         print(f"💡 Fix: mkdir -p {cfg}", file=sys.stderr)
@@ -3207,10 +3215,10 @@ def cmd_start(args):
 
     def _find_parent_anchor_dir(cwd: Path) -> Path | None:
         """
-        Find the nearest ancestor `.ccb_config/` (project anchor) directory.
+        Find the nearest ancestor `.ccb/` (or legacy `.ccb_config/`) project anchor directory.
 
         Used only to block auto-creation when a parent anchor exists. Users can still
-        create a local `.ccb_config/` manually to treat this directory as a new project.
+        create a local `.ccb/` manually to treat this directory as a new project.
         """
         try:
             start = cwd.resolve()
@@ -3218,8 +3226,15 @@ def cmd_start(args):
             start = cwd.absolute()
 
         for parent in start.parents:
-            candidate = parent / ".ccb_config"
-            if not candidate.is_dir():
+            candidate: Path | None = None
+            primary = parent / ".ccb"
+            if primary.is_dir():
+                candidate = primary
+            else:
+                legacy = parent / ".ccb_config"
+                if legacy.is_dir():
+                    candidate = legacy
+            if not candidate:
                 continue
             # Ignore anchors at $HOME or filesystem root (too broad / likely accidental).
             is_dangerous, _reason = _is_dangerous_root(parent)
@@ -3229,31 +3244,48 @@ def cmd_start(args):
         return None
 
     work_dir = Path.cwd()
-    cfg = work_dir / ".ccb_config"
-    if cfg.exists() and not cfg.is_dir():
-        print("❌ Invalid .ccb_config: exists but is not a directory", file=sys.stderr)
-        print(f"   path: {cfg}", file=sys.stderr)
+    primary_cfg = project_config_dir(work_dir)
+    legacy_cfg = legacy_project_config_dir(work_dir)
+
+    if primary_cfg.exists() and not primary_cfg.is_dir():
+        print("❌ Invalid .ccb: exists but is not a directory", file=sys.stderr)
+        print(f"   path: {primary_cfg}", file=sys.stderr)
         print("💡 Fix: remove it or rename it, then retry.", file=sys.stderr)
         return 2
 
+    if legacy_cfg.exists() and not legacy_cfg.is_dir() and not primary_cfg.exists():
+        print("❌ Invalid .ccb_config: exists but is not a directory", file=sys.stderr)
+        print(f"   path: {legacy_cfg}", file=sys.stderr)
+        print("💡 Fix: remove it or rename it, then retry.", file=sys.stderr)
+        return 2
+
+    if not primary_cfg.exists() and legacy_cfg.is_dir():
+        try:
+            legacy_cfg.replace(primary_cfg)
+            print(f"✅ Migrated legacy config dir: {legacy_cfg} -> {primary_cfg}", file=sys.stderr)
+        except Exception as exc:
+            print(f"⚠️  Failed to migrate {legacy_cfg} -> {primary_cfg}: {exc}", file=sys.stderr)
+            print("   Continuing with legacy .ccb_config directory.", file=sys.stderr)
+
+    cfg = resolve_project_config_dir(work_dir)
     if not cfg.is_dir():
         is_dangerous, danger_reason = _is_dangerous_root(Path.cwd())
         parent_anchor = _find_parent_anchor_dir(Path.cwd())
         if parent_anchor:
             project_root = parent_anchor.parent
             print(
-                "❌ .ccb_config not found in current directory, but an existing project anchor was found in a parent directory.",
+                "❌ Project config directory not found in current directory, but an existing project anchor was found in a parent directory.",
                 file=sys.stderr,
             )
             print(f"   cwd:         {Path.cwd()}", file=sys.stderr)
             print(f"   project_root:{project_root}", file=sys.stderr)
             print("💡 Auto-create blocked to avoid accidental nesting.", file=sys.stderr)
-            print("💡 If you want this directory to be a separate project, create .ccb_config here:", file=sys.stderr)
-            print("   mkdir .ccb_config", file=sys.stderr)
+            print("💡 If you want this directory to be a separate project, create .ccb here:", file=sys.stderr)
+            print("   mkdir .ccb", file=sys.stderr)
             return 2
 
         if is_dangerous and not _env_truthy("CCB_INIT_PROJECT_DANGEROUS"):
-            print(f"❌ Refusing to auto-create .ccb_config in {danger_reason}.", file=sys.stderr)
+            print(f"❌ Refusing to auto-create .ccb in {danger_reason}.", file=sys.stderr)
             print("💡 If you really intend to do this, set CCB_INIT_PROJECT_DANGEROUS=1 and retry.", file=sys.stderr)
             return 2
         try:

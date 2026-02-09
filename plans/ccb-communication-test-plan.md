@@ -15,14 +15,14 @@
 ## Requirements Summary
 
 ### Problem Statement
-CCB communication flows must be tested end-to-end across realistic scenarios (new project init, legacy restore, multi-project parallel use, stress, large payloads) while enforcing strict `.ccb_config`-anchored isolation and preventing cross-project leakage.
+CCB communication flows must be tested end-to-end across realistic scenarios (new project init, legacy restore, multi-project parallel use, stress, large payloads) while enforcing strict `.ccb`-anchored isolation and preventing cross-project leakage.
 
 ### Scope
 In scope:
 - ask/ping/pend commands for codex/gemini/opencode/claude.
 - daemon lifecycle (autostart, managed shutdown, stale lock recovery).
 - project lifecycle (new project, legacy migration, restore).
-- file structure edge cases (nested dirs, missing `.ccb_config`, parent anchor).
+- file structure edge cases (nested dirs, missing `.ccb`, parent anchor).
 - parallel and serial queueing; cancellation and blocking behavior.
 - stress and large payload handling.
 - mixed provider mounting and mixed invocation paths (codex + claude, etc.).
@@ -56,7 +56,7 @@ Use a layered testing pyramid:
 4) Stress and load tests that exercise queueing and timeouts.
 
 ### Key Components
-- **Project Fixture**: Creates temp project roots and `.ccb_config` anchors.
+- **Project Fixture**: Creates temp project roots and `.ccb` anchors.
 - **Stub Providers**: Fake codex/gemini/claude/opencode binaries and logs.
 - **Daemon Orchestrator**: Starts/stops per-project daemons, asserts managed state.
 - **Isolation Verifier**: Ensures registry/session/log routing never crosses project id.
@@ -70,7 +70,7 @@ Tests generate isolated project roots, start providers/daemons with stub CLIs, s
 ## Implementation Plan
 
 ### Step 1: Baseline Fixtures and Stubs
-- **Actions**: Build pytest fixtures for project roots, `.ccb_config`, registry seeding, and stub provider binaries/logs.
+- **Actions**: Build pytest fixtures for project roots, `.ccb`, registry seeding, and stub provider binaries/logs.
 - **Deliverables**: `test/fixtures/` (or helpers), stub CLI scripts, reusable log builders.
 - **Dependencies**: None.
 
@@ -103,7 +103,7 @@ Tests generate isolated project roots, start providers/daemons with stub CLIs, s
 
 ## Technical Considerations
 
-- Strict `.ccb_config` anchoring means tests must never rely on ancestor traversal.
+- Strict `.ccb` anchoring means tests must never rely on ancestor traversal.
 - Deterministic stubs should simulate ask/ping/pend contracts and produce realistic logs/state files.
 - Queueing validation must measure ordering and latency without flaky sleeps (use polling with timeouts).
 - tmux/WezTerm dependencies should be minimized in tests that do not require panes.

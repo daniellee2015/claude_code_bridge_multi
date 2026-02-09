@@ -232,7 +232,7 @@ data = {
     "active": True,
     "ccb_project_id": project_id,
 }
-path = proj / ".ccb_config" / ".gemini-session"
+path = proj / ".ccb" / ".gemini-session"
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -259,7 +259,7 @@ data = {
     "active": True,
     "ccb_project_id": project_id,
 }
-path = proj / ".ccb_config" / ".claude-session"
+path = proj / ".ccb" / ".claude-session"
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -288,7 +288,7 @@ data = {
     "active": True,
     "ccb_project_id": project_id,
 }
-path = proj / ".ccb_config" / ".opencode-session"
+path = proj / ".ccb" / ".opencode-session"
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -317,7 +317,7 @@ data = {
     "active": True,
     "ccb_project_id": project_id,
 }
-path = proj / ".ccb_config" / ".droid-session"
+path = proj / ".ccb" / ".droid-session"
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -348,7 +348,7 @@ data = {
     "active": True,
     "ccb_project_id": project_id,
 }
-path = proj / ".ccb_config" / ".codex-session"
+path = proj / ".ccb" / ".codex-session"
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 }
@@ -377,7 +377,7 @@ NEW_PARENT="${PROJ_NEW%/*}"
 PARENT_ANCHOR=0
 CUR="${NEW_PARENT}"
 while [ "${CUR}" != "/" ]; do
-  if [ -d "${CUR}/.ccb_config" ]; then
+  if [ -d "${CUR}/.ccb" ]; then
     PARENT_ANCHOR=1
     break
   fi
@@ -391,8 +391,8 @@ else
   NEW_SESSION="ccb-new-${RUN_ID}"
   tmux new-session -d -s "${NEW_SESSION}" -c "${PROJ_NEW}" bash -lc "env PATH=\"${PATH}\" GEMINI_ROOT=\"${GEMINI_ROOT}\" CCB_RUN_DIR=\"${RUN_DIR_NEW}\" CCB_GASKD=1 CCB_GASKD_AUTOSTART=1 ${ROOT}/ccb gemini >\"${PROJ_NEW}/ccb.out\" 2>\"${PROJ_NEW}/ccb.err\""
   SESSIONS+=("${NEW_SESSION}")
-  if wait_for_file "${PROJ_NEW}/.ccb_config/.gemini-session" 10; then
-    ok "auto-create created .ccb_config"
+  if wait_for_file "${PROJ_NEW}/.ccb/.gemini-session" 10; then
+    ok "auto-create created .ccb"
   else
     fail "auto-create missing .gemini-session"
   fi
@@ -400,7 +400,7 @@ fi
 
 log "Setup: mixed provider project"
 PROJ_MIX="${TEST_DIR1}/mix_${RUN_ID}"
-mkdir -p "${PROJ_MIX}/.ccb_config"
+mkdir -p "${PROJ_MIX}/.ccb"
 PID_MIX="$(compute_project_id "${PROJ_MIX}")"
 RUN_DIR_MIX="$(compute_run_dir "${PROJ_MIX}")"
 record_run_dir "${RUN_DIR_MIX}"
@@ -567,7 +567,7 @@ fi
 log "Test: nested project isolation"
 PROJ_NEST_PARENT="${TEST_DIR1}/nest_${RUN_ID}"
 PROJ_NEST_CHILD="${PROJ_NEST_PARENT}/child"
-mkdir -p "${PROJ_NEST_PARENT}/.ccb_config" "${PROJ_NEST_CHILD}/.ccb_config"
+mkdir -p "${PROJ_NEST_PARENT}/.ccb" "${PROJ_NEST_CHILD}/.ccb"
 PID_PARENT="$(compute_project_id "${PROJ_NEST_PARENT}")"
 PID_CHILD="$(compute_project_id "${PROJ_NEST_CHILD}")"
 if [ "${PID_PARENT}" != "${PID_CHILD}" ]; then
@@ -606,7 +606,7 @@ fi
 
 log "Test: old project restore (gask + gpend)"
 PROJ_RESTORE="${TEST_DIR1}/restore_${RUN_ID}"
-mkdir -p "${PROJ_RESTORE}/.ccb_config"
+mkdir -p "${PROJ_RESTORE}/.ccb"
 PID_RESTORE="$(compute_project_id "${PROJ_RESTORE}")"
 RUN_DIR_RESTORE="$(compute_run_dir "${PROJ_RESTORE}")"
 record_run_dir "${RUN_DIR_RESTORE}"
@@ -635,7 +635,7 @@ fi
 log "Test: parallel and serialized gask"
 PROJ_PAR_A="${TEST_DIR1}/par_${RUN_ID}_a"
 PROJ_PAR_B="${TEST_DIR2}/par_${RUN_ID}_b"
-mkdir -p "${PROJ_PAR_A}/.ccb_config" "${PROJ_PAR_B}/.ccb_config"
+mkdir -p "${PROJ_PAR_A}/.ccb" "${PROJ_PAR_B}/.ccb"
 RUN_DIR_PAR_A="$(compute_run_dir "${PROJ_PAR_A}")"
 RUN_DIR_PAR_B="$(compute_run_dir "${PROJ_PAR_B}")"
 record_run_dir "${RUN_DIR_PAR_A}"
@@ -753,7 +753,7 @@ fi
 
 log "Test: stress gask"
 PROJ_STRESS="${TEST_DIR1}/stress_${RUN_ID}"
-mkdir -p "${PROJ_STRESS}/.ccb_config"
+mkdir -p "${PROJ_STRESS}/.ccb"
 RUN_DIR_STRESS="$(compute_run_dir "${PROJ_STRESS}")"
 record_run_dir "${RUN_DIR_STRESS}"
 PID_STRESS="$(compute_project_id "${PROJ_STRESS}")"

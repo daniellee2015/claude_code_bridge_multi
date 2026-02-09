@@ -16,7 +16,7 @@ TEST_DIR2="${TEST_PARENT}/test_ccb2"
 PROJ_A="${TEST_DIR1}/pend_${RUN_ID}_a"
 PROJ_B="${TEST_DIR2}/pend_${RUN_ID}_b"
 
-mkdir -p "${PROJ_A}/.ccb_config" "${PROJ_B}/.ccb_config"
+mkdir -p "${PROJ_A}/.ccb" "${PROJ_B}/.ccb"
 
 FAIL=0
 log() { echo "== $*"; }
@@ -62,7 +62,7 @@ log_a = Path(sys.argv[3])
 log_b = Path(sys.argv[4])
 
 def write_session(proj: Path, log_path: Path, sid: str) -> None:
-    path = proj / ".ccb_config" / ".codex-session"
+    path = proj / ".ccb" / ".codex-session"
     data = {"codex_session_path": str(log_path), "codex_session_id": sid, "active": True}
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -159,7 +159,7 @@ def write_session(proj: Path, label: str) -> Path:
     return session_path
 
 def write_binding(proj: Path, session_path: Path) -> None:
-    path = proj / ".ccb_config" / ".claude-session"
+    path = proj / ".ccb" / ".claude-session"
     data = {"claude_session_path": str(session_path), "claude_session_id": session_path.stem, "active": True}
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -263,7 +263,7 @@ proj_a = Path(sys.argv[1])
 proj_b = Path(sys.argv[2])
 
 def write_session(proj: Path, label: str) -> None:
-    path = proj / ".ccb_config" / ".opencode-session"
+    path = proj / ".ccb" / ".opencode-session"
     data = {"opencode_session_id": f"ses_{label}", "opencode_project_id": f"proj{label}", "active": True}
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

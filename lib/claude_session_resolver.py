@@ -9,7 +9,7 @@ from typing import Optional
 
 from pane_registry import load_registry_by_claude_pane, load_registry_by_project_id, load_registry_by_session_id
 from project_id import compute_ccb_project_id
-from session_utils import find_project_session_file, project_config_dir
+from session_utils import find_project_session_file, resolve_project_config_dir
 
 
 SESSION_ENV_KEYS = (
@@ -116,7 +116,7 @@ def _select_resolution(data: dict, session_file: Optional[Path], record: Optiona
 
 def _candidate_default_session_file(work_dir: Path) -> Optional[Path]:
     try:
-        cfg = project_config_dir(work_dir)
+        cfg = resolve_project_config_dir(work_dir)
     except Exception:
         return None
     return cfg / ".claude-session"
@@ -246,7 +246,7 @@ def resolve_claude_session(work_dir: Path) -> Optional[ClaudeSessionResolution]:
         current_pid = compute_ccb_project_id(work_dir)
     except Exception:
         current_pid = ""
-    strict_project = (Path(work_dir) / ".ccb_config").is_dir()
+    strict_project = resolve_project_config_dir(work_dir).is_dir()
     allow_cross = os.environ.get("CCB_ALLOW_CROSS_PROJECT_SESSION") in ("1", "true", "yes")
     if not strict_project and not allow_cross:
         return None

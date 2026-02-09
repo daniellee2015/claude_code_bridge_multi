@@ -22,7 +22,7 @@ def test_find_project_session_file_prefers_ccb_config(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     root.mkdir(parents=True)
 
-    cfg = root / ".ccb_config"
+    cfg = root / ".ccb"
     cfg.mkdir(parents=True)
     primary = cfg / ".codex-session"
     primary.write_text("{}", encoding="utf-8")

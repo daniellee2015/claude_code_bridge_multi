@@ -20,7 +20,7 @@ try:
     def main() -> int:
         try:
             parser = argparse.ArgumentParser(prog="lping", add_help=True)
-            parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .claude-session (or .ccb_config/.claude-session)")
+            parser.add_argument("--session-file", dest="session_file", default=None, help="Path to .claude-session (or .ccb/.claude-session)")
             args = parser.parse_args()
             if args.session_file:
                 os.environ["CCB_SESSION_FILE"] = str(args.session_file)

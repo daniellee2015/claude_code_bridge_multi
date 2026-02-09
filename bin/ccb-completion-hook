@@ -367,24 +367,29 @@ Result: {reply_content}
     # Search for session file in multiple locations (order matters - most specific first)
     work_dir = os.environ.get("CCB_WORK_DIR", "")
     search_paths = []
+    config_dirnames = (".ccb", ".ccb_config")
 
     # 1. Request's work_dir (most specific)
     if work_dir:
-        search_paths.append(Path(work_dir) / ".ccb_config" / session_filename)
+        for dirname in config_dirnames:
+            search_paths.append(Path(work_dir) / dirname / session_filename)
 
     # 2. Current working directory (fallback)
     cwd = os.getcwd()
     if cwd != work_dir:
-        search_paths.append(Path(cwd) / ".ccb_config" / session_filename)
+        for dirname in config_dirnames:
+            search_paths.append(Path(cwd) / dirname / session_filename)
 
     # 3. User's home-based locations
-    search_paths.append(Path.home() / ".local" / "share" / "codex-dual" / ".ccb_config" / session_filename)
+    for dirname in config_dirnames:
+        search_paths.append(Path.home() / ".local" / "share" / "codex-dual" / dirname / session_filename)
 
     # 4. On Windows, also check LOCALAPPDATA
     if os.name == "nt":
         localappdata = os.environ.get("LOCALAPPDATA", "")
         if localappdata:
-            search_paths.insert(0, Path(localappdata) / "codex-dual" / ".ccb_config" / session_filename)
+            for dirname in reversed(config_dirnames):
+                search_paths.insert(0, Path(localappdata) / "codex-dual" / dirname / session_filename)
 
     pane_id = None
     terminal = "tmux"  # default

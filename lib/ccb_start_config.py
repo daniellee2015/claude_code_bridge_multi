@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 from typing import Optional, Tuple
 
+from session_utils import legacy_project_config_dir, project_config_dir
+
 
 CONFIG_FILENAME = "ccb.config"
 DEFAULT_PROVIDERS = ["codex", "gemini", "opencode", "claude"]
@@ -116,29 +118,37 @@ def _read_config(path: Path) -> dict:
     return _parse_config_obj(obj)
 
 
-def _config_paths(work_dir: Path) -> Tuple[Path, Path]:
-    project = Path(work_dir) / ".ccb_config" / CONFIG_FILENAME
+def _config_paths(work_dir: Path) -> Tuple[Path, Path, Path]:
+    primary = project_config_dir(work_dir) / CONFIG_FILENAME
+    legacy = legacy_project_config_dir(work_dir) / CONFIG_FILENAME
     global_path = Path.home() / ".ccb" / CONFIG_FILENAME
-    return project, global_path
+    return primary, legacy, global_path
 
 
 def load_start_config(work_dir: Path) -> StartConfig:
-    project, global_path = _config_paths(work_dir)
-    if project.exists():
-        return StartConfig(data=_read_config(project), path=project)
+    primary, legacy, global_path = _config_paths(work_dir)
+    if primary.exists():
+        return StartConfig(data=_read_config(primary), path=primary)
+    if legacy.exists():
+        return StartConfig(data=_read_config(legacy), path=legacy)
     if global_path.exists():
         return StartConfig(data=_read_config(global_path), path=global_path)
     return StartConfig(data={}, path=None)
 
 
 def ensure_default_start_config(work_dir: Path) -> Tuple[Optional[Path], bool]:
-    project, _global_path = _config_paths(work_dir)
-    if project.exists():
-        return project, False
+    primary, legacy, _global_path = _config_paths(work_dir)
+    if primary.exists():
+        return primary, False
+    if legacy.exists():
+        return legacy, False
+    target = primary
+    if not primary.parent.exists() and legacy.parent.is_dir():
+        target = legacy
     try:
-        project.parent.mkdir(parents=True, exist_ok=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
         payload = ",".join(DEFAULT_PROVIDERS) + "\n"
-        project.write_text(payload, encoding="utf-8")
-        return project, True
+        target.write_text(payload, encoding="utf-8")
+        return target, True
     except Exception:
         return None, False

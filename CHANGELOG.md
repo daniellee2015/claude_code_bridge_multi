@@ -2,12 +2,21 @@
 
 ## Unreleased
 
+## v5.2.3 (2026-02-09)
+
+### 🚀 Project-Local History + Legacy Compatibility
+
+- **Local History**: Context exports now save to `./.ccb/history/` per project
+- **CWD Scope**: Auto transfer runs only for the current working directory
+- **Legacy Migration**: Auto-detect `.ccb_config` and upgrade to `.ccb` when possible
+- **Claude /continue**: Attach the latest history file with a single skill
+
 ## v5.2.2 (2026-02-04)
 
 ### 🚀 Session Switch Capture
 
 - **Old Session Fields**: `.claude-session` now records `old_claude_session_id` / `old_claude_session_path` with `old_updated_at`
-- **Auto Context Export**: Previous Claude session is extracted to `~/.ccb/transfers/claude-<timestamp>-<old_id>.md`
+- **Auto Context Export**: Previous Claude session is extracted to `./.ccb/history/claude-<timestamp>-<old_id>.md`
 - **Transfer Cleanup**: Improved noise filtering while preserving tool-only actions
 
 ## v5.1.2 (2026-01-29)

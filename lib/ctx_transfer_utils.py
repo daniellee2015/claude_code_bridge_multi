@@ -11,6 +11,32 @@ from env_utils import env_bool, env_int
 _AUTO_TRANSFER_LOCK = threading.Lock()
 _AUTO_TRANSFER_SEEN: dict[str, float] = {}
 
+def _normalize_path_for_match(value: Path) -> str:
+    try:
+        from project_id import normalize_work_dir
+    except Exception:
+        normalize_work_dir = None
+    try:
+        if normalize_work_dir:
+            return normalize_work_dir(value)
+    except Exception:
+        pass
+    try:
+        return str(Path(value).expanduser().resolve())
+    except Exception:
+        try:
+            return str(Path(value).expanduser().absolute())
+        except Exception:
+            return str(value)
+
+
+def _is_current_work_dir(work_dir: Path) -> bool:
+    try:
+        cwd = Path.cwd()
+    except Exception:
+        cwd = Path(".")
+    return _normalize_path_for_match(cwd) == _normalize_path_for_match(work_dir)
+
 
 def _auto_transfer_key(
     provider: str,
@@ -38,6 +64,9 @@ def maybe_auto_transfer(
         work_dir = Path(work_dir).expanduser()
     except Exception:
         work_dir = Path.cwd()
+
+    if not _is_current_work_dir(work_dir):
+        return
 
     key = _auto_transfer_key(provider, work_dir, session_path, session_id, project_id)
     now = time.time()

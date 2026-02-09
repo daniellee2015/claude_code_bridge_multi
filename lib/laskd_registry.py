@@ -18,7 +18,13 @@ from typing import Optional
 
 from laskd_session import ClaudeProjectSession, load_project_session, _maybe_auto_extract_old_session
 from session_file_watcher import HAS_WATCHDOG, SessionFileWatcher
-from session_utils import find_project_session_file, safe_write_session
+from session_utils import (
+    CCB_PROJECT_CONFIG_DIRNAME,
+    CCB_PROJECT_CONFIG_LEGACY_DIRNAME,
+    find_project_session_file,
+    resolve_project_config_dir,
+    safe_write_session,
+)
 
 
 CLAUDE_PROJECTS_ROOT = Path(
@@ -444,7 +450,11 @@ class LaskdSessionRegistry:
         with self._lock:
             entry = self._sessions.get(key)
             if entry:
-                session_file = entry.session_file or find_project_session_file(work_dir) or (work_dir / ".ccb_config" / ".claude-session")
+                session_file = (
+                    entry.session_file
+                    or find_project_session_file(work_dir, ".claude-session")
+                    or (resolve_project_config_dir(work_dir) / ".claude-session")
+                )
                 if session_file.exists():
                     try:
                         current_mtime = session_file.stat().st_mtime
@@ -490,7 +500,11 @@ class LaskdSessionRegistry:
 
     def _load_and_cache(self, work_dir: Path) -> Optional[_SessionEntry]:
         session = load_project_session(work_dir)
-        session_file = session.session_file if session else (find_project_session_file(work_dir) or (work_dir / ".ccb_config" / ".claude-session"))
+        session_file = (
+            session.session_file
+            if session
+            else (find_project_session_file(work_dir, ".claude-session") or (resolve_project_config_dir(work_dir) / ".claude-session"))
+        )
         mtime = 0.0
         if session_file.exists():
             try:
@@ -566,7 +580,7 @@ class LaskdSessionRegistry:
             self._release_watchers_for_work_dir(work_dir, str(work_dir))
 
     def _check_one(self, key: str, work_dir: Path, *, now: float, refresh_interval_s: float, scan_limit: int) -> None:
-        session_file = find_project_session_file(work_dir) or (work_dir / ".ccb_config" / ".claude-session")
+        session_file = find_project_session_file(work_dir, ".claude-session") or (resolve_project_config_dir(work_dir) / ".claude-session")
         try:
             exists = session_file.exists()
         except Exception:
@@ -794,10 +808,7 @@ class LaskdSessionRegistry:
         return False
 
     def _find_claude_session_file(self, work_dir: Path) -> Optional[Path]:
-        try:
-            return find_project_session_file(work_dir) or (work_dir / ".ccb_config" / ".claude-session")
-        except TypeError:
-            return find_project_session_file(work_dir, ".claude-session") or (work_dir / ".ccb_config" / ".claude-session")
+        return find_project_session_file(work_dir, ".claude-session") or (resolve_project_config_dir(work_dir) / ".claude-session")
 
     def _update_session_file_direct(self, session_file: Path, log_path: Path, session_id: str) -> None:
         if not session_file.exists():
@@ -819,7 +830,7 @@ class LaskdSessionRegistry:
                 work_dir_path = None
         if work_dir_path is None:
             try:
-                if session_file.parent.name == ".ccb_config":
+                if session_file.parent.name in (CCB_PROJECT_CONFIG_DIRNAME, CCB_PROJECT_CONFIG_LEGACY_DIRNAME):
                     work_dir_path = session_file.parent.parent
             except Exception:
                 work_dir_path = None

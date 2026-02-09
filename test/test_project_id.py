@@ -37,7 +37,7 @@ def test_compute_ccb_project_id_stable_for_same_dir(tmp_path: Path) -> None:
 
 
 def test_compute_ccb_project_id_uses_anchor_root(tmp_path: Path) -> None:
-    (tmp_path / ".ccb_config").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".ccb").mkdir(parents=True, exist_ok=True)
     subdir = tmp_path / "a" / "b"
     subdir.mkdir(parents=True, exist_ok=True)
 

@@ -79,7 +79,7 @@ def normalize_work_dir(value: str | Path) -> str:
 
 def _find_ccb_config_root(start_dir: Path) -> Path | None:
     """
-    Find a `.ccb_config/` directory in the current working directory only.
+    Find a `.ccb/` (or legacy `.ccb_config/`) directory in the current working directory only.
 
     This enforces per-directory isolation (no ancestor traversal).
     """
@@ -88,8 +88,11 @@ def _find_ccb_config_root(start_dir: Path) -> Path | None:
     except Exception:
         current = Path.cwd()
     try:
-        cfg = current / ".ccb_config"
+        cfg = current / ".ccb"
         if cfg.is_dir():
+            return current
+        legacy = current / ".ccb_config"
+        if legacy.is_dir():
             return current
     except Exception:
         return None
@@ -101,7 +104,7 @@ def compute_ccb_project_id(work_dir: Path) -> str:
     Compute CCB's routing project id (ccb_project_id).
 
     Priority:
-    - Current directory containing `.ccb_config/` (project anchor).
+    - Current directory containing `.ccb/` (project anchor).
     - Current work_dir (fallback).
     """
     try:
@@ -109,7 +112,7 @@ def compute_ccb_project_id(work_dir: Path) -> str:
     except Exception:
         wd = Path.cwd()
 
-    # Priority 1: Current directory `.ccb_config/` only
+    # Priority 1: Current directory `.ccb/` only
     base = _find_ccb_config_root(wd)
 
     if base is None:

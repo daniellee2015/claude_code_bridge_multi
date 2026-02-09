@@ -26,7 +26,7 @@ if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ -n "${WINDIR:-
   for pair in $PROVIDERS; do
     provider="${pair%%:*}"
     # Check session file exists first
-    if [[ -f "$CWD/.ccb_config/.${provider}-session" ]] || [[ -f "$CWD/.${provider}-session" ]]; then
+    if [[ -f "$CWD/.ccb/.${provider}-session" ]] || [[ -f "$CWD/.ccb_config/.${provider}-session" ]] || [[ -f "$CWD/.${provider}-session" ]]; then
       # Try the ping command to check if daemon is responsive
       if "$SCRIPT_DIR/ping" "$provider" >/dev/null 2>&1; then
         MOUNTED="$MOUNTED $provider"
@@ -43,7 +43,7 @@ else
     daemon="${pair##*:}"
 
     # Check session file exists
-    if [[ -f "$CWD/.ccb_config/.${provider}-session" ]] || [[ -f "$CWD/.${provider}-session" ]]; then
+    if [[ -f "$CWD/.ccb/.${provider}-session" ]] || [[ -f "$CWD/.ccb_config/.${provider}-session" ]] || [[ -f "$CWD/.${provider}-session" ]]; then
       # Check daemon is online
       if echo "$ONLINE" | grep -q "${daemon}d"; then
         MOUNTED="$MOUNTED $provider"
