@@ -62,6 +62,11 @@ class PerSessionWorkerPool(Generic[WorkerT]):
         created = False
         with self._lock:
             worker = self._workers.get(session_key)
+            # Check if worker thread is dead and needs replacement
+            if worker is not None and not worker.is_alive():
+                # Worker thread died, remove it and create a new one
+                self._workers.pop(session_key, None)
+                worker = None
             if worker is None:
                 worker = factory(session_key)
                 self._workers[session_key] = worker
