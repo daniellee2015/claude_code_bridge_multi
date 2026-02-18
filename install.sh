@@ -123,6 +123,10 @@ SCRIPTS_TO_LINK=(
   bin/maild
   bin/ctx-transfer
   ccb
+  multi/bin/ccb-multi
+  multi/bin/ccb-multi-clean
+  multi/bin/ccb-multi-history
+  multi/bin/ccb-multi-status
 )
 
 CLAUDE_MARKDOWN=(
@@ -595,6 +599,30 @@ copy_project() {
     sed -i.bak "s/^GIT_COMMIT = .*/GIT_COMMIT = \"$git_commit\"/" "$INSTALL_PREFIX/ccb"
     sed -i.bak "s/^GIT_DATE = .*/GIT_DATE = \"$git_date\"/" "$INSTALL_PREFIX/ccb"
     rm -f "$INSTALL_PREFIX/ccb.bak"
+  fi
+}
+
+install_ccb_multi_deps() {
+  local multi_dir="$INSTALL_PREFIX/multi"
+
+  if [[ ! -d "$multi_dir" ]]; then
+    echo "WARN: ccb-multi directory not found, skipping npm install"
+    return
+  fi
+
+  # Check if npm is available
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "WARN: npm not found, skipping ccb-multi dependencies installation"
+    echo "   ccb-multi requires Node.js and npm to be installed"
+    return
+  fi
+
+  echo "Installing ccb-multi dependencies..."
+  if (cd "$multi_dir" && npm install --production --silent >/dev/null 2>&1); then
+    echo "OK: ccb-multi dependencies installed"
+  else
+    echo "WARN: Failed to install ccb-multi dependencies"
+    echo "   You can manually run: cd $multi_dir && npm install"
   fi
 }
 
@@ -1482,6 +1510,7 @@ install_all() {
   cleanup_legacy_files
   save_wezterm_config
   copy_project
+  install_ccb_multi_deps
   install_bin_links
   ensure_path_configured
   install_claude_commands
@@ -1502,6 +1531,7 @@ install_all() {
   echo "   AGENTS.md configured with review rubrics"
   echo "   .clinerules configured with role assignments"
   echo "   Global settings.json permissions added"
+  echo "   ccb-multi tools installed"
 }
 
 uninstall_claude_md_config() {

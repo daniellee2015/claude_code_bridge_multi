@@ -77,25 +77,82 @@ def normalize_work_dir(value: str | Path) -> str:
     return s
 
 
-def _find_ccb_config_root(start_dir: Path) -> Path | None:
+def _find_git_root(start_dir: Path) -> Path | None:
     """
-    Find a `.ccb/` (or legacy `.ccb_config/`) directory in the current working directory only.
-
-    This enforces per-directory isolation (no ancestor traversal).
+    Find the root of the git repository by traversing up.
+    Returns None if not in a git repository.
     """
     try:
         current = Path(start_dir).expanduser().absolute()
     except Exception:
         current = Path.cwd()
+
+    # Traverse up to find .git directory
+    while True:
+        try:
+            if (current / ".git").exists():
+                return current
+        except Exception:
+            pass
+
+        parent = current.parent
+        if parent == current:  # Reached root
+            break
+        current = parent
+
+    return None
+
+
+def _find_ccb_config_root(start_dir: Path) -> Path | None:
+    """
+    Find a `.ccb/` (or legacy `.ccb_config/`) directory by traversing up.
+
+    Search strategy:
+    1. If in a git repository, search up to git root (prevents cross-project confusion)
+    2. Otherwise, search up to 10 levels (prevents excessive traversal)
+
+    This allows running `ask` from any subdirectory while preventing cross-project errors.
+    """
     try:
-        cfg = current / ".ccb"
-        if cfg.is_dir():
-            return current
-        legacy = current / ".ccb_config"
-        if legacy.is_dir():
-            return current
+        current = Path(start_dir).expanduser().absolute()
     except Exception:
-        return None
+        current = Path.cwd()
+
+    # Find git repository boundary (if any)
+    git_root = _find_git_root(current)
+
+    # Traverse up to find .ccb directory
+    max_levels = 10  # Limit traversal for non-git directories
+    level = 0
+
+    while True:
+        try:
+            cfg = current / ".ccb"
+            if cfg.is_dir():
+                return current
+            legacy = current / ".ccb_config"
+            if legacy.is_dir():
+                return current
+        except Exception:
+            pass
+
+        # Stop at git root boundary (if in git repo)
+        if git_root and current == git_root:
+            break
+
+        # Stop at filesystem root
+        parent = current.parent
+        if parent == current:
+            break
+
+        # Stop after max levels (for non-git directories)
+        if not git_root:
+            level += 1
+            if level >= max_levels:
+                break
+
+        current = parent
+
     return None
 
 
