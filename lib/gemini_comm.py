@@ -33,16 +33,36 @@ _GEMINI_HASH_CACHE: dict[str, list[Path]] = {}
 _GEMINI_HASH_CACHE_TS = 0.0
 
 
-def _get_project_hash(work_dir: Optional[Path] = None) -> str:
-    """Calculate project directory hash (consistent with gemini-cli's Storage.getFilePathHash)"""
+def _compute_project_hashes(work_dir: Optional[Path] = None) -> tuple[str, str]:
+    """Return ``(basename_hash, sha256_hash)`` for *work_dir*.
+
+    Gemini CLI >= 0.29.0 uses the directory basename; older versions used
+    SHA-256 of the absolute path.  Callers that need to probe both formats
+    should use this helper.
+    """
     path = work_dir or Path.cwd()
-    # gemini-cli uses Node.js path.resolve() (doesn't resolve symlinks),
-    # so we use absolute() instead of resolve() to avoid hash mismatch on WSL/Windows.
     try:
-        normalized = str(path.expanduser().absolute())
+        abs_path = path.expanduser().absolute()
     except Exception:
-        normalized = str(path)
-    return hashlib.sha256(normalized.encode()).hexdigest()
+        abs_path = path
+    basename_hash = abs_path.name
+    sha256_hash = hashlib.sha256(str(abs_path).encode()).hexdigest()
+    return basename_hash, sha256_hash
+
+
+def _get_project_hash(work_dir: Optional[Path] = None) -> str:
+    """Return the *primary* project hash for *work_dir*.
+
+    Prefers the new basename format when its ``chats/`` directory exists,
+    falls back to SHA-256, and defaults to basename for forward compat.
+    """
+    basename_hash, sha256_hash = _compute_project_hashes(work_dir)
+    root = Path(os.environ.get("GEMINI_ROOT") or (Path.home() / ".gemini" / "tmp")).expanduser()
+    if (root / basename_hash / "chats").is_dir():
+        return basename_hash
+    if (root / sha256_hash / "chats").is_dir():
+        return sha256_hash
+    return basename_hash
 
 
 def _iter_registry_work_dirs() -> list[Path]:
@@ -78,10 +98,12 @@ def _work_dirs_for_hash(project_hash: str) -> list[Path]:
         _GEMINI_HASH_CACHE = {}
         for wd in _iter_registry_work_dirs():
             try:
-                h = _get_project_hash(wd)
+                # Register both hash formats so the watchdog can match either
+                bn, sha = _compute_project_hashes(wd)
+                for h in (bn, sha):
+                    _GEMINI_HASH_CACHE.setdefault(h, []).append(wd)
             except Exception:
                 continue
-            _GEMINI_HASH_CACHE.setdefault(h, []).append(wd)
         _GEMINI_HASH_CACHE_TS = now
     return _GEMINI_HASH_CACHE.get(project_hash, [])
 
@@ -169,7 +191,14 @@ class GeminiLogReader:
         self.root = Path(root).expanduser()
         self.work_dir = work_dir or Path.cwd()
         forced_hash = os.environ.get("GEMINI_PROJECT_HASH", "").strip()
-        self._project_hash = forced_hash or _get_project_hash(self.work_dir)
+        if forced_hash:
+            self._project_hash = forced_hash
+            self._all_known_hashes: set[str] = {forced_hash}
+        else:
+            self._project_hash = _get_project_hash(self.work_dir)
+            bn, sha = _compute_project_hashes(self.work_dir)
+            # Store all known hashes so they survive hash adoption
+            self._all_known_hashes = {bn, sha}
         self._preferred_session: Optional[Path] = None
         try:
             poll = float(os.environ.get("GEMINI_POLL_INTERVAL", "0.05"))
@@ -212,22 +241,49 @@ class GeminiLogReader:
         return sessions[-1] if sessions else None
 
     def _scan_latest_session(self) -> Optional[Path]:
-        chats = self._chats_dir()
-        try:
-            if chats:
-                sessions = sorted(
-                    (p for p in chats.glob("session-*.json") if p.is_file() and not p.name.startswith(".")),
-                    key=lambda p: p.stat().st_mtime,
-                )
-            else:
-                sessions = []
-        except OSError:
-            sessions = []
+        """Scan for the latest session file across all known hash dirs."""
+        best: Optional[Path] = None
+        best_mtime: float = 0.0
 
-        if sessions:
-            return sessions[-1]
+        # De-duplicate: primary first, then remaining known hashes
+        seen: set[str] = set()
+        scan_order: list[str] = []
+        for h in [self._project_hash] + sorted(self._all_known_hashes - {self._project_hash}):
+            if h not in seen:
+                seen.add(h)
+                scan_order.append(h)
 
-        return None
+        for project_hash in scan_order:
+            chats = self.root / project_hash / "chats"
+            if not chats.is_dir():
+                continue
+            try:
+                for p in chats.glob("session-*.json"):
+                    if not p.is_file() or p.name.startswith("."):
+                        continue
+                    try:
+                        mt = p.stat().st_mtime
+                    except OSError:
+                        continue
+                    if mt > best_mtime:
+                        best = p
+                        best_mtime = mt
+            except OSError:
+                continue
+
+        # If the winning session lives under a different hash, adopt it
+        # and add it to known hashes so future scans still cover all formats
+        if best is not None:
+            try:
+                winning_hash = best.parent.parent.name
+                if winning_hash:
+                    self._all_known_hashes.add(winning_hash)
+                    if winning_hash != self._project_hash:
+                        self._project_hash = winning_hash
+            except Exception:
+                pass
+
+        return best
 
     def _latest_session(self) -> Optional[Path]:
         preferred = self._preferred_session

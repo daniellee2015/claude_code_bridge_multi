@@ -70,6 +70,7 @@ class AskDaemonServer:
         on_stop: Optional[Callable[[], None]] = None,
         parent_pid: Optional[int] = None,
         managed: Optional[bool] = None,
+        work_dir: Optional[str] = None,
     ):
         self.spec = spec
         self.host = host
@@ -80,6 +81,7 @@ class AskDaemonServer:
         self.request_queue_size = request_queue_size
         self.on_stop = on_stop
         self.parent_pid = parent_pid if parent_pid is not None else _env_parent_pid()
+        self.work_dir = work_dir or os.getcwd()
         env_managed = _env_truthy("CCB_MANAGED")
         self.managed = env_managed if managed is None else bool(managed)
         if self.parent_pid:
@@ -230,7 +232,7 @@ class AskDaemonServer:
                                 threading.Thread(target=httpd.shutdown, daemon=True).start()
                                 return
 
-                    threading.Thread(target=_parent_monitor, daemon=True).start()
+                threading.Thread(target=_parent_monitor, daemon=True).start()
 
                 actual_host, actual_port = httpd.server_address
                 self._write_state(str(actual_host), int(actual_port))
@@ -265,6 +267,7 @@ class AskDaemonServer:
             "python": sys.executable,
             "parent_pid": int(self.parent_pid or 0) or None,
             "managed": bool(self.managed),
+            "work_dir": self.work_dir,
         }
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         ok, _err = safe_write_session(self.state_file, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")

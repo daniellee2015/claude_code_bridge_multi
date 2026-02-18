@@ -80,6 +80,11 @@ def main(argv: list[str]) -> int:
         default=os.environ.get("CCB_ASKD_PROVIDERS", ""),
         help="Comma-separated list of providers to enable (default: all)",
     )
+    ap.add_argument(
+        "--work-dir",
+        default=os.environ.get("CCB_WORK_DIR", ""),
+        help="Override work_dir written to state file (default: cwd)",
+    )
     args = ap.parse_args(argv[1:])
 
     state_file = Path(args.state_file).expanduser() if args.state_file else None
@@ -102,7 +107,7 @@ def main(argv: list[str]) -> int:
 
     registry = _create_registry(providers)
     print(f"Enabled providers: {', '.join(registry.keys())}", file=sys.stderr)
-    daemon = UnifiedAskDaemon(host=host, port=port, state_file=state_file, registry=registry)
+    daemon = UnifiedAskDaemon(host=host, port=port, state_file=state_file, registry=registry, work_dir=args.work_dir or None)
     return daemon.serve_forever()
 
 

@@ -107,6 +107,7 @@ class UnifiedAskDaemon:
         *,
         state_file: Optional[Path] = None,
         registry: Optional[ProviderRegistry] = None,
+        work_dir: Optional[str] = None,
     ):
         self.host = host
         self.port = port
@@ -114,6 +115,7 @@ class UnifiedAskDaemon:
         self.token = random_token()
         self.registry = registry or ProviderRegistry()
         self.pool = _UnifiedWorkerPool(self.registry)
+        self.work_dir = work_dir
 
     def _handle_request(self, msg: dict) -> dict:
         """Handle an incoming request."""
@@ -233,6 +235,7 @@ class UnifiedAskDaemon:
             request_handler=self._handle_request,
             request_queue_size=128,
             on_stop=_on_stop,
+            work_dir=self.work_dir,
         )
         return server.serve_forever()
 

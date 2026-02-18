@@ -88,8 +88,9 @@ def resolve_work_dir_with_registry(
     Priority:
       1) cli_session_file (--session-file)
       2) env_session_file (CCB_SESSION_FILE)
-      3) registry lookup by ccb_project_id + provider
-      4) default_cwd / Path.cwd()
+      3) daemon state work_dir (if unified askd is enabled)
+      4) registry lookup by ccb_project_id + provider
+      5) default_cwd / Path.cwd()
     """
     raw = (cli_session_file or "").strip() or (env_session_file or "").strip()
     if raw:
@@ -99,6 +100,17 @@ def resolve_work_dir_with_registry(
             env_session_file=env_session_file,
             default_cwd=default_cwd,
         )
+
+    # Try to get work_dir from unified askd daemon state
+    from askd_runtime import get_daemon_work_dir
+    daemon_work_dir = get_daemon_work_dir("askd.json")
+    if daemon_work_dir and daemon_work_dir.exists():
+        try:
+            found = find_project_session_file(daemon_work_dir, spec.session_filename)
+            if found:
+                return daemon_work_dir, found
+        except Exception:
+            pass
 
     cwd = default_cwd or Path.cwd()
     try:

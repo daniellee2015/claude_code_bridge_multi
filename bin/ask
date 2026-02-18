@@ -112,7 +112,10 @@ def _send_via_unified_daemon(
     from askd_runtime import state_file_path
     import askd_rpc
 
+    # Use CCB_RUN_DIR (set by CCB startup) to locate the state file.
+    # This already contains the correct project-specific path.
     state_file = state_file_path("askd.json")
+
     state = askd_rpc.read_state(state_file)
     if not state:
         print("[ERROR] Unified askd daemon not running", file=sys.stderr)
@@ -121,6 +124,13 @@ def _send_via_unified_daemon(
     host = state.get("connect_host") or state.get("host") or "127.0.0.1"
     port = int(state.get("port") or 0)
     token = state.get("token") or ""
+    # Use daemon's work_dir instead of current shell's cwd
+    raw_work_dir = state.get("work_dir")
+    daemon_work_dir = raw_work_dir.strip() if isinstance(raw_work_dir, str) and raw_work_dir.strip() else ""
+    if not daemon_work_dir or not Path(daemon_work_dir).is_dir():
+        if daemon_work_dir:
+            print(f"[WARN] daemon work_dir not found: {daemon_work_dir}, falling back to cwd", file=sys.stderr)
+        daemon_work_dir = os.getcwd()
 
     if not port:
         print("[ERROR] Invalid askd state", file=sys.stderr)
@@ -132,7 +142,7 @@ def _send_via_unified_daemon(
         "id": make_task_id(),
         "token": token,
         "provider": provider,
-        "work_dir": os.getcwd(),
+        "work_dir": daemon_work_dir,
         "timeout_s": timeout,
         "message": message,
         "no_wrap": no_wrap,

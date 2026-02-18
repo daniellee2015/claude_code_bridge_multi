@@ -119,3 +119,25 @@ def normalize_connect_host(host: str) -> str:
     if host in ("::", "[::]"):
         return "::1"
     return host
+
+
+def get_daemon_work_dir(state_file_name: str = "askd.json") -> Path | None:
+    """
+    Read daemon's work_dir from state file.
+    Returns None if daemon is not running or work_dir is not recorded.
+    """
+    try:
+        state_path = state_file_path(state_file_name)
+        if not state_path.exists():
+            return None
+        with state_path.open("r", encoding="utf-8") as f:
+            import json
+            state = json.load(f)
+        if not isinstance(state, dict):
+            return None
+        work_dir = state.get("work_dir")
+        if not work_dir or not isinstance(work_dir, str):
+            return None
+        return Path(work_dir.strip())
+    except Exception:
+        return None
