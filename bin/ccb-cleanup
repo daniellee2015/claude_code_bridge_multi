@@ -65,6 +65,27 @@ def cleanup_stale_locks():
     return removed
 
 
+def get_tmux_pane_for_workdir(work_dir: str) -> str:
+    """Find tmux pane ID for a given work directory."""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["tmux", "list-panes", "-a", "-F", "#{pane_id}\t#{pane_current_path}"],
+            capture_output=True,
+            text=True,
+            timeout=2.0
+        )
+        if result.returncode == 0:
+            for line in result.stdout.strip().split('\n'):
+                if '\t' in line:
+                    pane_id, pane_path = line.split('\t', 1)
+                    if pane_path == work_dir:
+                        return pane_id
+    except Exception:
+        pass
+    return "unknown"
+
+
 def list_running_daemons(verbose=False):
     """List all running askd daemons."""
     cache_dir = Path.home() / ".cache" / "ccb" / "projects"
@@ -96,6 +117,7 @@ def list_running_daemons(verbose=False):
                         "port": data.get("port", "unknown"),
                         "host": data.get("host", "unknown"),
                         "managed": data.get("managed", False),
+                        "tmux_pane": get_tmux_pane_for_workdir(data.get("work_dir", "")),
                     })
 
                 daemons.append(daemon_info)
@@ -130,7 +152,9 @@ def interactive_kill():
     print("=== Running askd daemons ===\n")
     for idx, d in enumerate(daemons, 1):
         status = "ZOMBIE (parent dead)" if not d["parent_alive"] else "OK"
+        tmux_pane = d.get('tmux_pane', 'unknown')
         print(f"{idx}. PID {d['pid']} (parent {d['parent_pid']}) - {status}")
+        print(f"   Tmux Pane: {tmux_pane}")
         print(f"   Project: {d['project_hash']}")
         print(f"   Work Dir: {d.get('work_dir', 'unknown')}")
         print(f"   Started: {d['started_at']}")
@@ -196,6 +220,8 @@ def main():
                     print(f"    Port: {d.get('port', 'unknown')}")
                     print(f"    Host: {d.get('host', 'unknown')}")
                     print(f"    Managed: {d.get('managed', False)}")
+                    tmux_pane = d.get('tmux_pane', 'unknown')
+                    print(f"    Tmux Pane: {tmux_pane}")
 
     if args.clean:
         print("\n=== Cleaning stale files ===")
