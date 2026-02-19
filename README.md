@@ -123,6 +123,55 @@ pend opencode
 
 ---
 
+## Process Management
+
+### List Running Daemons
+
+```bash
+# Simple list
+ccb-cleanup --list
+
+# Detailed info (work_dir, port, host)
+ccb-cleanup --list -v
+```
+
+Example output:
+```
+=== Running askd daemons ===
+  PID 26639 (parent 26168) - OK
+    Project: ad4f88fa5c5269a3
+    Started: 2026-02-19 10:05:35
+    Work Dir: /Users/user/project/.ccb-instances/instance-1
+    Port: 65108
+    Host: 127.0.0.1
+```
+
+### Kill Specific Daemon
+
+```bash
+# Kill by PID
+ccb-cleanup --kill-pid 26639
+
+# Interactive selection
+ccb-cleanup -i
+```
+
+Interactive mode shows a numbered list of daemons and prompts for selection with confirmation.
+
+### Cleanup Operations
+
+```bash
+# Kill zombie daemons (parent process dead)
+ccb-cleanup --kill-zombies
+
+# Clean stale state files and locks
+ccb-cleanup --clean
+```
+
+**Note**: The shell alias `ccb-kill` kills ALL CCB processes indiscriminately. Use `ccb-cleanup --kill-pid` for precise control.
+
+---
+
 ## Installation
 
 ### Option 1: Full Install (clone this repo)
