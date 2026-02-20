@@ -1,3 +1,6 @@
 [submodule "multi"]
 	path = multi
 	url = https://github.com/daniellee2015/ccb-multi.git
+[submodule "ccb-status"]
+	path = ccb-status
+	url = https://github.com/daniellee2015/ccb-status.git
