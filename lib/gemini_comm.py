@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 import threading
@@ -33,38 +34,101 @@ _GEMINI_HASH_CACHE: dict[str, list[Path]] = {}
 _GEMINI_HASH_CACHE_TS = 0.0
 
 
-def _compute_project_hashes(work_dir: Optional[Path] = None) -> tuple[str, str]:
-    """Return ``(basename_hash, sha256_hash)`` for *work_dir*.
+def _slugify_project_hash(name: str) -> str:
+    """Return Gemini-compatible slug for a project directory name."""
+    text = (name or "").strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-")
 
-    Gemini CLI >= 0.29.0 uses the directory basename; older versions used
-    a SHA-256 hash of the absolute path.  We compute both so the caller
-    can try each one.
+
+def _compute_project_hashes(work_dir: Optional[Path] = None) -> tuple[str, str]:
+    """Return ``(slug_hash, sha256_hash)`` for *work_dir*.
+
+    Gemini CLI >= 0.29.0 uses a slugified basename for project directories;
+    older versions used a SHA-256 hash of the absolute path. We compute both
+    so the caller can try each one.
     """
     path = work_dir or Path.cwd()
     try:
         abs_path = path.expanduser().absolute()
     except Exception:
         abs_path = path
-    basename_hash = abs_path.name
+    basename_hash = _slugify_project_hash(abs_path.name)
     sha256_hash = hashlib.sha256(str(abs_path).encode()).hexdigest()
     return basename_hash, sha256_hash
+
+
+def _project_hash_candidates(work_dir: Optional[Path] = None, *, root: Optional[Path] = None) -> list[str]:
+    """Return ordered project-hash candidates for this work directory.
+
+    Supports Gemini's historical SHA-256 layout and modern slug-based layouts,
+    including collision-suffixed directories like ``name-1``.
+    """
+    path = work_dir or Path.cwd()
+    try:
+        abs_path = path.expanduser().absolute()
+    except Exception:
+        abs_path = path
+
+    raw_base = (abs_path.name or "").strip()
+    slug_base, sha256_hash = _compute_project_hashes(abs_path)
+    suffix_re = re.compile(rf"^{re.escape(slug_base)}-\d+$") if slug_base else None
+
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def _add(value: str) -> None:
+        token = (value or "").strip()
+        if not token or token in seen:
+            return
+        seen.add(token)
+        candidates.append(token)
+
+    root_path = Path(root).expanduser() if root else None
+    discovered: list[tuple[float, str]] = []
+    if root_path and root_path.is_dir() and slug_base:
+        try:
+            for child in root_path.iterdir():
+                if not child.is_dir():
+                    continue
+                chats = child / "chats"
+                if not chats.is_dir():
+                    continue
+                name = child.name
+                if name == slug_base or name == raw_base or (suffix_re and suffix_re.match(name)):
+                    try:
+                        latest_mtime = max(
+                            (p.stat().st_mtime for p in chats.glob("session-*.json") if p.is_file()),
+                            default=chats.stat().st_mtime,
+                        )
+                    except OSError:
+                        latest_mtime = 0.0
+                    discovered.append((latest_mtime, name))
+        except OSError:
+            pass
+
+    for _mtime, name in sorted(discovered, key=lambda item: item[0], reverse=True):
+        _add(name)
+    _add(slug_base)
+    _add(raw_base)
+    _add(sha256_hash)
+    return candidates
 
 
 def _get_project_hash(work_dir: Optional[Path] = None) -> str:
     """Return the Gemini session directory name for *work_dir*.
 
-    Prefers the new basename format (Gemini CLI >= 0.29.0) when its
-    ``chats/`` directory exists, falls back to SHA-256 (older versions),
-    and defaults to basename for forward compatibility.
+    Prefers discovered slug-based directories (including collision suffixes),
+    falls back to SHA-256 (older versions), and defaults to slug basename for
+    forward compatibility.
     """
     path = work_dir or Path.cwd()
-    basename_hash, sha256_hash = _compute_project_hashes(path)
     root = Path(os.environ.get("GEMINI_ROOT") or (Path.home() / ".gemini" / "tmp")).expanduser()
-    if (root / basename_hash / "chats").is_dir():
-        return basename_hash
-    if (root / sha256_hash / "chats").is_dir():
-        return sha256_hash
-    return basename_hash
+    candidates = _project_hash_candidates(path, root=root)
+    for project_hash in candidates:
+        if (root / project_hash / "chats").is_dir():
+            return project_hash
+    return candidates[0] if candidates else ""
 
 
 def _iter_registry_work_dirs() -> list[Path]:
@@ -100,9 +164,10 @@ def _work_dirs_for_hash(project_hash: str) -> list[Path]:
         _GEMINI_HASH_CACHE = {}
         for wd in _iter_registry_work_dirs():
             try:
-                # Register both hash formats so the watchdog can match either
-                bn, sha = _compute_project_hashes(wd)
-                for h in (bn, sha):
+                # Register all known hash candidates so the watchdog can match
+                # slug, slug-suffixed, and legacy SHA-256 layouts.
+                hashes = _project_hash_candidates(wd, root=GEMINI_ROOT)
+                for h in hashes:
                     _GEMINI_HASH_CACHE.setdefault(h, []).append(wd)
             except Exception:
                 continue
@@ -195,11 +260,13 @@ class GeminiLogReader:
         forced_hash = os.environ.get("GEMINI_PROJECT_HASH", "").strip()
         if forced_hash:
             self._project_hash = forced_hash
+            self._all_known_hashes = {forced_hash}
         else:
             self._project_hash = _get_project_hash(self.work_dir)
-            bn, sha = _compute_project_hashes(self.work_dir)
-            # Store all known hashes so they survive hash adoption
-            self._all_known_hashes = {bn, sha}
+            # Store all known hashes so they survive hash adoption and Gemini
+            # hash-format changes.
+            self._all_known_hashes = set(_project_hash_candidates(self.work_dir, root=self.root))
+            self._all_known_hashes.add(self._project_hash)
         self._preferred_session: Optional[Path] = None
         try:
             poll = float(os.environ.get("GEMINI_POLL_INTERVAL", "0.05"))
