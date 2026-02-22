@@ -1,69 +1,94 @@
+from __future__ import annotations
+
+import json
 import os
 import subprocess
-import sys
-import time
-import json
-import pytest
 from pathlib import Path
 
-# Add lib to sys.path
-script_dir = Path(__file__).resolve().parent
-lib_dir = script_dir.parent / "lib"
-sys.path.insert(0, str(lib_dir))
 
-def test_ccb_ping_autostart(tmp_path):
-    """Test that ccb-ping --autostart starts the daemon if session file exists."""
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    
-    # Create a mock session file
-    session_file = project_dir / ".gemini-session"
-    # Provide enough fields to avoid GeminiCommunicator init errors
-    session_file.write_text(json.dumps({
-        "active": True, 
+SCRIPT_DIR = Path(__file__).resolve().parent
+BIN_DIR = SCRIPT_DIR.parent / "bin"
+ASKD_BIN = BIN_DIR / "askd"
+CCB_PING_BIN = BIN_DIR / "ccb-ping"
+CCB_MOUNTED_BIN = BIN_DIR / "ccb-mounted"
+
+
+def _write_gemini_session(project_dir: Path) -> Path:
+    cfg_dir = project_dir / ".ccb"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    session_file = cfg_dir / ".gemini-session"
+    payload = {
+        "active": True,
         "work_dir": str(project_dir),
-        "session_id": "test-session-123",
-        "runtime_dir": str(tmp_path / "run"),
-        "pane_id": "1",
-        "terminal": "tmux"
-    }))
-    (tmp_path / "run").mkdir()
-    
-    # Run ccb-ping with --autostart
-    bin_dir = script_dir.parent / "bin"
-    ccb_ping = bin_dir / "ccb-ping"
-    
-    env = os.environ.copy()
-    env["CCB_GASKD_AUTOSTART"] = "1"
-    env["CCB_GASKD"] = "1"
-    # Use a mock CCB_RUN_DIR so we don't interfere with real sessions
-    env["CCB_RUN_DIR"] = str(tmp_path / "run")
-    
-    result = subprocess.run(
-        [sys.executable, str(ccb_ping), "gemini", "--autostart"],
-        cwd=str(project_dir),
-        capture_output=True,
-        text=True,
-        env=env
-    )
-    
-    # Check that it didn't fail with "unrecognized argument"
-    assert "unrecognized arguments: --autostart" not in result.stderr
-    
-def test_ccb_mounted_autostart(tmp_path):
-    """Test that ccb-mounted --autostart is recognized."""
+        "runtime_dir": str(project_dir),
+        "session_id": "test-session",
+        "pane_id": "%1",
+        "terminal": "tmux",
+    }
+    session_file.write_text(json.dumps(payload, ensure_ascii=True) + "\n", encoding="utf-8")
+    return session_file
+
+
+def _shutdown_askd(run_dir: Path) -> None:
+    env = dict(os.environ)
+    env["CCB_RUN_DIR"] = str(run_dir)
+    subprocess.run([str(ASKD_BIN), "--shutdown"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def test_ccb_ping_autostart_uses_session_file_work_dir(tmp_path: Path) -> None:
     project_dir = tmp_path / "project"
+    other_dir = tmp_path / "other"
+    run_dir = tmp_path / "run"
     project_dir.mkdir()
-    
-    bin_dir = script_dir.parent / "bin"
-    ccb_mounted = bin_dir / "ccb-mounted"
-    
-    result = subprocess.run(
-        ["bash", str(ccb_mounted), "--autostart", str(project_dir)],
-        capture_output=True,
-        text=True
-    )
-    
-    # Should be valid JSON
-    data = json.loads(result.stdout)
-    assert "mounted" in data
+    other_dir.mkdir()
+    run_dir.mkdir()
+    session_file = _write_gemini_session(project_dir)
+
+    env = dict(os.environ)
+    env["CCB_GASKD"] = "1"
+    env["CCB_GASKD_AUTOSTART"] = "1"
+    env["CCB_RUN_DIR"] = str(run_dir)
+
+    try:
+        subprocess.run(
+            [str(CCB_PING_BIN), "gemini", "--session-file", str(session_file), "--autostart"],
+            cwd=str(other_dir),
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert (run_dir / "askd.json").exists()
+    finally:
+        _shutdown_askd(run_dir)
+
+
+def test_ccb_mounted_autostart_uses_target_path(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project"
+    other_dir = tmp_path / "other"
+    run_dir = tmp_path / "run"
+    project_dir.mkdir()
+    other_dir.mkdir()
+    run_dir.mkdir()
+    _write_gemini_session(project_dir)
+
+    env = dict(os.environ)
+    env["CCB_GASKD"] = "1"
+    env["CCB_GASKD_AUTOSTART"] = "1"
+    env["CCB_RUN_DIR"] = str(run_dir)
+
+    try:
+        result = subprocess.run(
+            ["bash", str(CCB_MOUNTED_BIN), "--autostart", str(project_dir)],
+            cwd=str(other_dir),
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0
+        parsed = json.loads(result.stdout)
+        assert parsed.get("cwd") == str(project_dir)
+        assert isinstance(parsed.get("mounted"), list)
+        assert (run_dir / "askd.json").exists()
+    finally:
+        _shutdown_askd(run_dir)

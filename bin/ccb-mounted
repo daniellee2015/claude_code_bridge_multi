@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ccb-mounted - Check which CCB providers are mounted
-# Usage: ccb-mounted [--json|--simple]
+# Usage: ccb-mounted [--json|--simple] [--autostart] [path]
 
 set -euo pipefail
 
@@ -59,7 +59,7 @@ if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ -n "${WINDIR:-
       if [[ "$AUTOSTART" == true ]]; then
         PING_ARGS+=("--autostart")
       fi
-      if "$SCRIPT_DIR/ccb-ping" "${PING_ARGS[@]}" >/dev/null 2>&1; then
+      if (cd "$CWD" && "$SCRIPT_DIR/ccb-ping" "${PING_ARGS[@]}") >/dev/null 2>&1; then
         MOUNTED="$MOUNTED $provider"
       fi
     fi
@@ -83,7 +83,7 @@ else
 
       if [[ "$IS_ONLINE" == false ]] && [[ "$AUTOSTART" == true ]]; then
         # Try to autostart if requested and not online
-        if "$SCRIPT_DIR/ccb-ping" "$provider" --autostart >/dev/null 2>&1; then
+        if (cd "$CWD" && "$SCRIPT_DIR/ccb-ping" "$provider" --autostart) >/dev/null 2>&1; then
            IS_ONLINE=true
         fi
       fi
