@@ -18,7 +18,7 @@ setup_windows_encoding()
 from cli_output import EXIT_ERROR, EXIT_NO_REPLY, EXIT_OK
 from claude_comm import ClaudeLogReader
 from ccb_protocol import strip_trailing_markers
-from pane_registry import load_registry_by_session_id, load_registry_by_claude_pane, load_registry_by_project_id
+from pane_registry import load_registry_by_session_id, load_registry_by_claude_pane, load_registry_by_project_id, upsert_registry
 from session_utils import find_project_session_file
 from askd_client import resolve_work_dir_with_registry
 from providers import LASK_CLIENT_SPEC
@@ -99,6 +99,72 @@ def _load_registry_log_path(current_pid: str | None) -> tuple[Path | None, dict 
     return None, None
 
 
+def _path_mtime_ns(path: Path | None) -> int:
+    if not path:
+        return -1
+    try:
+        return int(path.stat().st_mtime_ns)
+    except Exception:
+        return -1
+
+
+def _pick_log_path(registry_log_path: Path | None, session_log_path: Path | None) -> tuple[Path | None, str]:
+    reg = registry_log_path if registry_log_path and registry_log_path.exists() else None
+    ses = session_log_path if session_log_path and session_log_path.exists() else None
+
+    if reg and ses:
+        try:
+            if reg.resolve() == ses.resolve():
+                _debug(f"Registry/session path identical: {reg}")
+                return reg, "same"
+        except Exception:
+            pass
+
+        reg_mtime = _path_mtime_ns(reg)
+        ses_mtime = _path_mtime_ns(ses)
+        if ses_mtime >= reg_mtime:
+            _debug(
+                "Registry/session conflict detected; prefer .claude-session path "
+                f"(session newer/equal). registry={reg} session={ses}"
+            )
+            return ses, "session"
+        _debug(
+            "Registry/session conflict detected; prefer registry path "
+            f"(registry newer). registry={reg} session={ses}"
+        )
+        return reg, "registry"
+
+    if ses:
+        _debug(f"Using claude_session_path from .claude-session: {ses}")
+        return ses, "session"
+    if reg:
+        _debug(f"Using claude_session_path from registry: {reg}")
+        return reg, "registry"
+    return None, "none"
+
+
+def _sync_registry_claude_path(record: dict | None, path: Path | None) -> None:
+    if not record or not path:
+        return
+    providers = record.get("providers")
+    if not isinstance(providers, dict):
+        return
+    claude = providers.get("claude")
+    if not isinstance(claude, dict):
+        return
+    new_path = str(path)
+    old_path = str(claude.get("claude_session_path") or "").strip()
+    if old_path == new_path:
+        return
+    try:
+        claude["claude_session_path"] = new_path
+        record["providers"] = providers
+        upsert_registry(record)
+        _debug(f"Registry claude_session_path refreshed: {new_path}")
+    except Exception as exc:
+        _debug(f"Failed to refresh registry claude_session_path: {exc}")
+
+
 def _parse_n(argv: list[str]) -> int:
     if len(argv) <= 1:
         return 1
@@ -146,9 +212,9 @@ def main(argv: list[str]) -> int:
                         _debug(f"Using registry by ccb_project_id: {registry_log_path}")
 
         session_log_path, _session_id = _load_session_log_path(work_dir, explicit_session_file)
-        log_path = registry_log_path or session_log_path
-        if not registry_log_path and log_path:
-            _debug(f"Using claude_session_path from .claude-session: {log_path}")
+        log_path, _path_source = _pick_log_path(registry_log_path, session_log_path)
+        if _path_source in ("session", "same"):
+            _sync_registry_claude_path(registry_record, log_path)
 
         reader = ClaudeLogReader(work_dir=work_dir)
         if log_path:
