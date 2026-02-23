@@ -1,6 +1,12 @@
-[submodule "multi"]
-	path = multi
+[submodule "ccb-multi"]
+	path = ccb-multi
 	url = https://github.com/daniellee2015/ccb-multi.git
 [submodule "ccb-status"]
 	path = ccb-status
 	url = https://github.com/daniellee2015/ccb-status.git
+[submodule "ccb-worktree"]
+	path = ccb-worktree
+	url = https://github.com/daniellee2015/ccb-worktree.git
+[submodule "ccb-shared-context"]
+	path = ccb-shared-context
+	url = https://github.com/daniellee2015/ccb-shared-context.git

@@ -123,10 +123,10 @@ SCRIPTS_TO_LINK=(
   bin/maild
   bin/ctx-transfer
   ccb
-  multi/bin/ccb-multi
-  multi/bin/ccb-multi-clean
-  multi/bin/ccb-multi-history
-  multi/bin/ccb-multi-status
+  ccb-multi/bin/ccb-multi
+  ccb-multi/bin/ccb-multi-clean
+  ccb-multi/bin/ccb-multi-history
+  ccb-multi/bin/ccb-multi-status
 )
 
 CLAUDE_MARKDOWN=(
