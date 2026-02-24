@@ -1,17 +1,17 @@
 <div align="center">
 
-# Claude Code Bridge (ccb) v5.2.5
+# Claude Code Bridge (ccb) v5.2.6
 
-**New Multi-Model Collaboration Tool via Split-Pane Terminal**
-**Claude & Codex & Gemini & OpenCode & Droid**
-**Ultra-low token real-time communication, unleashing full CLI power**
+**Multi-Model Collaboration via Split-Pane Terminal**
+**Claude · Codex · Gemini · OpenCode · Droid**
+**Lightweight async messaging — full CLI power, every interaction visible**
 
 <p>
   <img src="https://img.shields.io/badge/Every_Interaction_Visible-096DD9?style=for-the-badge" alt="Every Interaction Visible">
   <img src="https://img.shields.io/badge/Every_Model_Controllable-CF1322?style=for-the-badge" alt="Every Model Controllable">
 </p>
 
-[![Version](https://img.shields.io/badge/version-5.2.5-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-5.2.6-orange.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/bfly123/claude_code_bridge/actions/workflows/test.yml/badge.svg)](https://github.com/bfly123/claude_code_bridge/actions/workflows/test.yml)
@@ -34,7 +34,7 @@
 
 ---
 
-**Introduction:** Multi-model collaboration effectively avoids model bias, cognitive blind spots, and context limitations. However, MCP, Skills and other direct API approaches have many limitations. This project offers a new WYSIWYG solution.
+**Introduction:** Multi-model collaboration avoids model bias, cognitive blind spots, and context limits. Unlike MCP or API-based approaches, ccb gives you a WYSIWYG split-pane terminal where every interaction is visible and every model is controllable.
 
 ## ⚡ Why ccb?
 
@@ -50,6 +50,25 @@
 <h2 align="center">🚀 What's New</h2>
 
 <details open>
+<summary><b>v5.2.6</b> - Async Communication & Gemini 0.29 Compatibility</summary>
+
+**🔧 Gemini CLI 0.29.0 Support:**
+- **Dual Hash Strategy**: Session path discovery now supports both basename and SHA-256 formats
+- **Autostart**: `ccb-ping` and `ccb-mounted` gain `--autostart` flag to launch offline provider daemons
+- **Cleanup Tool**: New `ccb-cleanup` utility for removing zombie daemons and stale state files
+
+**🔗 Async Communication Fixes:**
+- **OpenCode Deadlock**: Fixed session ID pinning that caused second async call to always fail
+- **Degraded Completion**: Adapters now accept `CCB_DONE` even when req_id doesn't match exactly
+- **req_id Regex**: `opencode_comm.py` now matches both old hex and new timestamp-based formats
+
+**🛠 Other Fixes:**
+- **lpend**: Prefers fresh Claude session path when registry is stale
+- **mail setup**: Unblocked `ccb mail setup` import on config v3
+
+</details>
+
+<details>
 <summary><b>v5.2.5</b> - Async Guardrail Hardening</summary>
 
 **🔧 Async Turn-Stop Fix:**
