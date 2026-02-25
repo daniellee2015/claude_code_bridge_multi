@@ -1069,11 +1069,45 @@ except Exception as e:
   fi
 }
 
-CCB_TMUX_MARKER="# ============================================================================="
+CCB_TMUX_MARKER="# CCB (Claude Code Bridge) tmux configuration"
 CCB_TMUX_MARKER_LEGACY="# CCB tmux configuration"
 
+remove_ccb_tmux_block_from_file() {
+  local target_conf="$1"
+
+  if [[ ! -f "$target_conf" ]]; then
+    return 0
+  fi
+
+  if ! grep -q "$CCB_TMUX_MARKER" "$target_conf" 2>/dev/null && \
+     ! grep -q "$CCB_TMUX_MARKER_LEGACY" "$target_conf" 2>/dev/null; then
+    return 0
+  fi
+
+  if ! pick_any_python_bin; then
+    return 1
+  fi
+
+  "$PYTHON_BIN" -c "
+import re
+path = '$target_conf'
+with open(path, 'r', encoding='utf-8') as f:
+    content = f.read()
+# Remove CCB tmux config block (both new and legacy markers)
+pattern = r'\n*# =+\n# CCB \(Claude Code Bridge\) tmux configuration.*?# =+\n# End of CCB tmux configuration\n# =+'
+content = re.sub(pattern, '', content, flags=re.DOTALL)
+pattern = r'\n*# CCB tmux configuration.*'
+content = re.sub(pattern, '', content, flags=re.DOTALL)
+with open(path, 'w', encoding='utf-8') as f:
+    f.write(content.strip() + '\n' if content.strip() else '')
+"
+}
+
 install_tmux_config() {
-  local tmux_conf="$HOME/.tmux.conf"
+  local tmux_conf_main="$HOME/.tmux.conf"
+  local tmux_conf_local="$HOME/.tmux.conf.local"
+  local tmux_conf="$tmux_conf_main"
+  local reload_conf="$tmux_conf_main"
   local ccb_tmux_conf="$REPO_ROOT/config/tmux-ccb.conf"
   local ccb_status_script="$REPO_ROOT/config/ccb-status.sh"
   local status_install_path="$BIN_DIR/ccb-status.sh"
@@ -1123,32 +1157,34 @@ install_tmux_config() {
     echo "Installed: $BIN_DIR/ccb-tmux-off.sh"
   fi
 
-  # Check if already configured (new or legacy marker)
-  local already_configured=false
-  if [[ -f "$tmux_conf" ]]; then
-    if grep -q "$CCB_TMUX_MARKER" "$tmux_conf" 2>/dev/null || \
-       grep -q "$CCB_TMUX_MARKER_LEGACY" "$tmux_conf" 2>/dev/null; then
-      already_configured=true
+  # Oh-My-Tmux keeps user customizations in ~/.tmux.conf.local.
+  # Appending to ~/.tmux.conf can break its internal _apply_configuration script.
+  if [[ -f "$tmux_conf_main" ]] && grep -q 'TMUX_CONF_LOCAL' "$tmux_conf_main" 2>/dev/null; then
+    tmux_conf="$tmux_conf_local"
+    reload_conf="$tmux_conf_main"
+    if [[ ! -f "$tmux_conf_local" ]]; then
+      touch "$tmux_conf_local"
     fi
+  else
+    reload_conf="$tmux_conf"
   fi
 
-  if $already_configured; then
-    # Update existing config: remove old CCB block and re-add
-    echo "Updating CCB tmux configuration..."
-    if pick_any_python_bin; then
-      "$PYTHON_BIN" -c "
-import re
-with open('$tmux_conf', 'r', encoding='utf-8') as f:
-    content = f.read()
-# Remove old CCB tmux config block (both new and legacy markers)
-pattern = r'\n*# =+\n# CCB \(Claude Code Bridge\) tmux configuration.*?# =+\n# End of CCB tmux configuration\n# =+'
-content = re.sub(pattern, '', content, flags=re.DOTALL)
-pattern = r'\n*# CCB tmux configuration.*'
-content = re.sub(pattern, '', content, flags=re.DOTALL)
-with open('$tmux_conf', 'w', encoding='utf-8') as f:
-    f.write(content.strip() + '\n' if content.strip() else '')
-"
+  # Check if already configured (new or legacy marker) in either main/local config.
+  local already_configured=false
+  for conf in "$tmux_conf_main" "$tmux_conf_local"; do
+    if [[ -f "$conf" ]] && \
+      (grep -q "$CCB_TMUX_MARKER" "$conf" 2>/dev/null || \
+       grep -q "$CCB_TMUX_MARKER_LEGACY" "$conf" 2>/dev/null); then
+      already_configured=true
+      break
     fi
+  done
+
+  if $already_configured; then
+    # Update existing config: remove old CCB block(s) and re-add at target location.
+    echo "Updating CCB tmux configuration..."
+    remove_ccb_tmux_block_from_file "$tmux_conf_main" || true
+    remove_ccb_tmux_block_from_file "$tmux_conf_local" || true
   else
     # Backup existing config if present
     if [[ -f "$tmux_conf" ]]; then
@@ -1179,23 +1215,24 @@ sys.stdout.write(content.replace('@CCB_BIN_DIR@', bin_dir))
   echo "   - CCB theme is enabled only while CCB is running (auto restore on exit)"
   echo "   - Vi-style pane management with h/j/k/l"
   echo "   - Mouse support and better copy mode"
-  echo "   - Run 'tmux source ~/.tmux.conf' to apply (or restart tmux)"
+  echo "   - Run 'tmux source $reload_conf' to apply (or restart tmux)"
 
   # Best-effort: if a tmux server is already running, reload config automatically.
   # (Avoid spawning a new server when tmux isn't running.)
   if command -v tmux >/dev/null 2>&1; then
     if tmux list-sessions >/dev/null 2>&1; then
-      if tmux source-file "$tmux_conf" >/dev/null 2>&1; then
+      if tmux source-file "$reload_conf" >/dev/null 2>&1; then
         echo "Reloaded tmux configuration in running server."
       else
-        echo "WARN: Failed to reload tmux configuration automatically; run: tmux source ~/.tmux.conf"
+        echo "WARN: Failed to reload tmux configuration automatically; run: tmux source $reload_conf"
       fi
     fi
   fi
 }
 
 uninstall_tmux_config() {
-  local tmux_conf="$HOME/.tmux.conf"
+  local tmux_conf_main="$HOME/.tmux.conf"
+  local tmux_conf_local="$HOME/.tmux.conf.local"
   local status_script="$BIN_DIR/ccb-status.sh"
   local border_script="$BIN_DIR/ccb-border.sh"
   local tmux_on_script="$BIN_DIR/ccb-tmux-on.sh"
@@ -1223,31 +1260,21 @@ uninstall_tmux_config() {
     echo "Removed: $tmux_off_script"
   fi
 
-  if [[ ! -f "$tmux_conf" ]]; then
-    return
-  fi
+  local removed_any=false
+  for conf in "$tmux_conf_main" "$tmux_conf_local"; do
+    if [[ -f "$conf" ]] && \
+      (grep -q "$CCB_TMUX_MARKER" "$conf" 2>/dev/null || \
+       grep -q "$CCB_TMUX_MARKER_LEGACY" "$conf" 2>/dev/null); then
+      echo "Removing CCB tmux configuration from $conf..."
+      if remove_ccb_tmux_block_from_file "$conf"; then
+        echo "Removed CCB tmux configuration from $conf"
+        removed_any=true
+      fi
+    fi
+  done
 
-  # Check for both new and legacy markers
-  if ! grep -q "$CCB_TMUX_MARKER" "$tmux_conf" 2>/dev/null && \
-     ! grep -q "$CCB_TMUX_MARKER_LEGACY" "$tmux_conf" 2>/dev/null; then
+  if ! $removed_any; then
     return
-  fi
-
-  echo "Removing CCB tmux configuration..."
-  if pick_any_python_bin; then
-    "$PYTHON_BIN" -c "
-import re
-with open('$tmux_conf', 'r', encoding='utf-8') as f:
-    content = f.read()
-# Remove CCB tmux config block (both new and legacy markers)
-pattern = r'\n*# =+\n# CCB \(Claude Code Bridge\) tmux configuration.*?# =+\n# End of CCB tmux configuration\n# =+'
-content = re.sub(pattern, '', content, flags=re.DOTALL)
-pattern = r'\n*# CCB tmux configuration.*'
-content = re.sub(pattern, '', content, flags=re.DOTALL)
-with open('$tmux_conf', 'w', encoding='utf-8') as f:
-    f.write(content.strip() + '\n' if content.strip() else '')
-"
-    echo "Removed CCB tmux configuration from $tmux_conf"
   fi
 }
 
