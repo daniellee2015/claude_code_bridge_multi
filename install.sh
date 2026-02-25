@@ -603,7 +603,7 @@ copy_project() {
 }
 
 install_ccb_multi_deps() {
-  local multi_dir="$INSTALL_PREFIX/multi"
+  local multi_dir="$INSTALL_PREFIX/ccb-multi"
 
   if [[ ! -d "$multi_dir" ]]; then
     echo "WARN: ccb-multi directory not found, skipping npm install"
@@ -620,10 +620,41 @@ install_ccb_multi_deps() {
   echo "Installing ccb-multi dependencies..."
   if (cd "$multi_dir" && npm install --production --silent >/dev/null 2>&1); then
     echo "OK: ccb-multi dependencies installed"
+    # Build TypeScript if needed
+    if [[ -f "$multi_dir/tsconfig.json" ]]; then
+      echo "Building ccb-multi..."
+      if (cd "$multi_dir" && npm run build >/dev/null 2>&1); then
+        echo "OK: ccb-multi built successfully"
+      else
+        echo "WARN: Failed to build ccb-multi"
+      fi
+    fi
   else
     echo "WARN: Failed to install ccb-multi dependencies"
     echo "   You can manually run: cd $multi_dir && npm install"
   fi
+
+  # Install and build other subpackages
+  for subpkg in ccb-status ccb-worktree ccb-shared-context; do
+    local pkg_dir="$INSTALL_PREFIX/$subpkg"
+    if [[ -d "$pkg_dir" ]]; then
+      echo "Installing $subpkg dependencies..."
+      if (cd "$pkg_dir" && npm install --production --silent >/dev/null 2>&1); then
+        echo "OK: $subpkg dependencies installed"
+        # Build TypeScript if needed
+        if [[ -f "$pkg_dir/tsconfig.json" ]]; then
+          echo "Building $subpkg..."
+          if (cd "$pkg_dir" && npm run build >/dev/null 2>&1); then
+            echo "OK: $subpkg built successfully"
+          else
+            echo "WARN: Failed to build $subpkg"
+          fi
+        fi
+      else
+        echo "WARN: Failed to install $subpkg dependencies"
+      fi
+    fi
+  done
 }
 
 install_bin_links() {
