@@ -170,6 +170,12 @@ class GeminiAdapter(BaseProviderAdapter):
         pane_check_interval = float(os.environ.get("CCB_GASKD_PANE_CHECK_INTERVAL", "2.0"))
         last_pane_check = time.time()
 
+        # Idle-timeout: if reply content stops changing for this many seconds,
+        # assume Gemini finished without writing CCB_DONE.
+        idle_timeout = float(os.environ.get("CCB_GEMINI_IDLE_TIMEOUT", "15.0"))
+        _last_reply_snapshot = ""
+        _last_reply_changed_at = time.time()
+
         while True:
             if deadline is not None:
                 remaining = deadline - time.time()
@@ -228,6 +234,19 @@ class GeminiAdapter(BaseProviderAdapter):
                 continue
             latest_reply = str(reply)
             if is_done_text(latest_reply, task.req_id):
+                done_seen = True
+                done_ms = _now_ms() - started_ms
+                break
+
+            # Idle-timeout: detect when Gemini finished but forgot CCB_DONE
+            if latest_reply != _last_reply_snapshot:
+                _last_reply_snapshot = latest_reply
+                _last_reply_changed_at = time.time()
+            elif latest_reply and (time.time() - _last_reply_changed_at >= idle_timeout):
+                _write_log(
+                    f"[WARN] Gemini reply idle for {idle_timeout}s without CCB_DONE, "
+                    f"accepting as complete req_id={task.req_id}"
+                )
                 done_seen = True
                 done_ms = _now_ms() - started_ms
                 break

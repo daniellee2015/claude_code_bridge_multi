@@ -62,6 +62,8 @@
 - **OpenCode 死锁**：修复会话 ID 固定导致第二次异步调用必定失败的问题
 - **降级完成检测**：适配器在 req_id 不完全匹配时仍可识别 `CCB_DONE`
 - **req_id 正则**：`opencode_comm.py` 同时匹配旧 hex 和新时间戳格式
+- **Gemini 空闲超时**：Gemini 漏写 `CCB_DONE` 时自动检测回复完成（默认 15s，可通过 `CCB_GEMINI_IDLE_TIMEOUT` 调整）
+- **Gemini Prompt 加固**：强化指令格式，降低 `CCB_DONE` 遗漏率
 
 **🛠 其他修复：**
 - **lpend**：registry 过期时优先使用更新鲜的 Claude 会话路径

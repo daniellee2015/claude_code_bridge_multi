@@ -61,6 +61,8 @@
 - **OpenCode Deadlock**: Fixed session ID pinning that caused second async call to always fail
 - **Degraded Completion**: Adapters now accept `CCB_DONE` even when req_id doesn't match exactly
 - **req_id Regex**: `opencode_comm.py` now matches both old hex and new timestamp-based formats
+- **Gemini Idle Timeout**: Auto-detect reply completion when Gemini omits `CCB_DONE` marker (15s idle, configurable via `CCB_GEMINI_IDLE_TIMEOUT`)
+- **Gemini Prompt Hardening**: Stronger instructions to reduce `CCB_DONE` omission rate
 
 **🛠 Other Fixes:**
 - **lpend**: Prefers fresh Claude session path when registry is stale
