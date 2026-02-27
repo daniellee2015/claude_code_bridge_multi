@@ -11,8 +11,8 @@ from ccb_protocol import (
     strip_done_text,
 )
 
-# Match both old (32-char hex) and new (YYYYMMDD-HHMMSS-mmm-PID) req_id formats
-ANY_DONE_LINE_RE = re.compile(r"^\s*CCB_DONE:\s*(?:[0-9a-f]{32}|\d{8}-\d{6}-\d{3}-\d+)\s*$", re.IGNORECASE)
+# Match both old (32-char hex) and new (YYYYMMDD-HHMMSS-mmm-PID-counter) req_id formats
+ANY_DONE_LINE_RE = re.compile(r"^\s*CCB_DONE:\s*(?:[0-9a-f]{32}|\d{8}-\d{6}-\d{3}-\d+-\d+)\s*$", re.IGNORECASE)
 
 
 def wrap_gemini_prompt(message: str, req_id: str) -> str:
@@ -20,10 +20,11 @@ def wrap_gemini_prompt(message: str, req_id: str) -> str:
     return (
         f"{REQ_ID_PREFIX} {req_id}\n\n"
         f"{message}\n\n"
-        "IMPORTANT:\n"
-        "- Reply with an execution summary, in English. Do not stay silent.\n"
-        "- End your reply with this exact final line (verbatim, on its own line):\n"
-        f"{DONE_PREFIX} {req_id}\n"
+        "IMPORTANT — you MUST follow these rules:\n"
+        "1. Reply in English with an execution summary. Do not stay silent.\n"
+        "2. Your FINAL line MUST be exactly (copy verbatim, no extra text):\n"
+        f"   {DONE_PREFIX} {req_id}\n"
+        "3. Do NOT omit, modify, or paraphrase the line above.\n"
     )
 
 

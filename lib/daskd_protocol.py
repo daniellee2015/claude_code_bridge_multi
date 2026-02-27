@@ -13,7 +13,7 @@ from ccb_protocol import (
     strip_done_text,
 )
 
-ANY_DONE_LINE_RE = re.compile(r"^\s*CCB_DONE:\s*\d{8}-\d{6}-\d{3}-\d+\s*$", re.IGNORECASE)
+ANY_DONE_LINE_RE = re.compile(r"^\s*CCB_DONE:\s*(?:[0-9a-f]{32}|\d{8}-\d{6}-\d{3}-\d+-\d+)\s*$", re.IGNORECASE)
 _SKILL_CACHE: str | None = None
 
 

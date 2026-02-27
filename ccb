@@ -51,9 +51,9 @@ backend_env = get_backend_env()
 if backend_env and not os.environ.get("CCB_BACKEND_ENV"):
     os.environ["CCB_BACKEND_ENV"] = backend_env
 
-VERSION = "5.2.4"
-GIT_COMMIT = "v5.2.4"
-GIT_DATE = "2026-02-11"
+VERSION = "5.2.6"
+GIT_COMMIT = "v5.2.6"
+GIT_DATE = "2026-02-24"
 
 _WIN_DRIVE_RE = re.compile(r"^[A-Za-z]:([/\\\\]|$)")
 _MNT_DRIVE_RE = re.compile(r"^/mnt/([A-Za-z])/(.*)$")
@@ -1129,6 +1129,34 @@ class AILauncher:
 
     def _claude_session_file(self) -> Path:
         return self._project_session_file(".claude-session")
+
+    def _backfill_existing_claude_session_work_dir_fields(self) -> None:
+        """Backfill work_dir/work_dir_norm for an existing .claude-session on startup."""
+        path = self._claude_session_file()
+        if not path.exists():
+            return
+
+        try:
+            raw = path.read_text(encoding="utf-8-sig")
+            data = json.loads(raw)
+        except Exception:
+            return
+        if not isinstance(data, dict):
+            return
+
+        changed = False
+        if not isinstance(data.get("work_dir"), str) or not str(data.get("work_dir") or "").strip():
+            data["work_dir"] = str(self.project_root)
+            changed = True
+        if not isinstance(data.get("work_dir_norm"), str) or not str(data.get("work_dir_norm") or "").strip():
+            data["work_dir_norm"] = _normalize_path_for_match(str(self.project_root))
+            changed = True
+
+        if not changed:
+            return
+
+        payload = json.dumps(data, ensure_ascii=False, indent=2)
+        safe_write_session(path, payload)
 
     def _read_local_claude_session_id(self) -> str | None:
         data = self._read_json_file(self._claude_session_file())
@@ -3028,6 +3056,11 @@ class AILauncher:
 
         if not self._require_project_config_dir():
             return 2
+
+        try:
+            self._backfill_existing_claude_session_work_dir_fields()
+        except Exception:
+            pass
 
         if not self.providers:
             print("❌ No providers configured. Define providers in ccb.config or pass them on the command line.", file=sys.stderr)

@@ -38,7 +38,3 @@ Bash(CCB_CALLER=claude ask $PROVIDER "$MESSAGE")
 - `/ask opencode Analyze this bug`
 - `/ask droid Execute this task`
 
-## Notes
-
-- `ask` already runs in background by default; no manual `nohup` is needed.
-- If it fails, check backend health with the corresponding ping command (`ccb-ping <provider>` (e.g., `ccb-ping gemini`)).

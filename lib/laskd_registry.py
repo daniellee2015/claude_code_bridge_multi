@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from laskd_session import ClaudeProjectSession, load_project_session, _maybe_auto_extract_old_session
+from project_id import compute_ccb_project_id, normalize_work_dir
 from session_file_watcher import HAS_WATCHDOG, SessionFileWatcher
 from session_utils import (
     CCB_PROJECT_CONFIG_DIRNAME,
@@ -200,6 +201,51 @@ def _path_within(child: str, parent: str) -> bool:
     if child == parent:
         return True
     return child.startswith(parent + "/")
+
+
+def _infer_work_dir_from_session_file(session_file: Path) -> Path:
+    try:
+        parent = Path(session_file).parent
+    except Exception:
+        return Path.cwd()
+    if parent.name in (CCB_PROJECT_CONFIG_DIRNAME, CCB_PROJECT_CONFIG_LEGACY_DIRNAME):
+        return parent.parent
+    return parent
+
+
+def _ensure_claude_session_work_dir_fields(payload: dict, session_file: Path) -> Optional[Path]:
+    if not isinstance(payload, dict):
+        return None
+
+    work_dir_path: Optional[Path] = None
+    raw_work_dir = payload.get("work_dir")
+    if isinstance(raw_work_dir, str) and raw_work_dir.strip():
+        try:
+            work_dir_path = Path(raw_work_dir.strip())
+        except Exception:
+            work_dir_path = None
+    if work_dir_path is None:
+        work_dir_path = _infer_work_dir_from_session_file(session_file)
+    if work_dir_path is None:
+        return None
+
+    work_dir_str = str(work_dir_path)
+    payload["work_dir"] = work_dir_str
+
+    raw_norm = payload.get("work_dir_norm")
+    if not isinstance(raw_norm, str) or not raw_norm.strip():
+        try:
+            payload["work_dir_norm"] = normalize_work_dir(work_dir_str)
+        except Exception:
+            payload["work_dir_norm"] = work_dir_str
+
+    if not str(payload.get("ccb_project_id") or "").strip():
+        try:
+            payload["ccb_project_id"] = compute_ccb_project_id(work_dir_path)
+        except Exception:
+            pass
+
+    return work_dir_path
 
 
 def _scan_latest_log_for_work_dir(
@@ -821,19 +867,7 @@ class LaskdSessionRegistry:
             payload = {}
         old_path = str(payload.get("claude_session_path") or "").strip()
         old_id = str(payload.get("claude_session_id") or "").strip()
-        work_dir_val = payload.get("work_dir")
-        work_dir_path: Optional[Path] = None
-        if isinstance(work_dir_val, str) and work_dir_val.strip():
-            try:
-                work_dir_path = Path(work_dir_val.strip())
-            except Exception:
-                work_dir_path = None
-        if work_dir_path is None:
-            try:
-                if session_file.parent.name in (CCB_PROJECT_CONFIG_DIRNAME, CCB_PROJECT_CONFIG_LEGACY_DIRNAME):
-                    work_dir_path = session_file.parent.parent
-            except Exception:
-                work_dir_path = None
+        work_dir_path = _ensure_claude_session_work_dir_fields(payload, session_file)
         new_path = str(log_path)
         new_id = str(session_id or "").strip()
         if old_id and old_id != new_id:

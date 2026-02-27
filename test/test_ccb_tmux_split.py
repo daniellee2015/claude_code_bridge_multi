@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from importlib.machinery import SourceFileLoader
 import os
 import subprocess
@@ -117,3 +118,27 @@ def test_start_codex_tmux_writes_bridge_pid(monkeypatch, tmp_path: Path) -> None
     runtime = Path(launcher.runtime_dir) / "codex"
     assert (runtime / "bridge.pid").exists()
     assert (runtime / "bridge.pid").read_text(encoding="utf-8").strip() == "999"
+
+
+def test_run_up_backfills_existing_claude_session_work_dir_fields(monkeypatch, tmp_path: Path) -> None:
+    ccb = _load_ccb_module()
+    monkeypatch.chdir(tmp_path)
+    cfg_dir = tmp_path / ".ccb"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    session_file = cfg_dir / ".claude-session"
+    session_file.write_text(json.dumps({"active": True}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("TMUX_PANE", "%0")
+    monkeypatch.setattr(ccb, "detect_terminal", lambda: "tmux")
+
+    launcher = ccb.AILauncher(providers=["codex"])
+    launcher.terminal_type = "tmux"
+
+    monkeypatch.setattr(launcher, "_start_provider_in_current_pane", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(launcher, "cleanup", lambda: None)
+
+    rc = launcher.run_up()
+    assert rc == 0
+
+    data = json.loads(session_file.read_text(encoding="utf-8"))
+    assert data.get("work_dir") == str(tmp_path.resolve())
+    assert data.get("work_dir_norm")

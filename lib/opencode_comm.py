@@ -30,7 +30,8 @@ from project_id import compute_ccb_project_id
 
 apply_backend_env()
 
-_REQ_ID_RE = re.compile(rf"{re.escape(REQ_ID_PREFIX)}\s*([0-9a-fA-F]{{32}})")
+# Match both old (32-char hex) and new (YYYYMMDD-HHMMSS-mmm-PID-counter) req_id formats
+_REQ_ID_RE = re.compile(rf"{re.escape(REQ_ID_PREFIX)}\s*([0-9a-fA-F]{{32}}|\d{{8}}-\d{{6}}-\d{{3}}-\d+-\d+)")
 
 
 def compute_opencode_project_id(work_dir: Path) -> str:

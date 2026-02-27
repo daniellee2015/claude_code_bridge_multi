@@ -19,7 +19,7 @@ from ccb_protocol import is_done_text, make_req_id, strip_done_text
 from laskd_protocol import wrap_claude_prompt
 from claude_session_resolver import resolve_claude_session
 from pane_registry import upsert_registry
-from project_id import compute_ccb_project_id
+from project_id import compute_ccb_project_id, normalize_work_dir
 from session_utils import safe_write_session
 from terminal import get_backend_for_session, get_pane_id_from_session
 
@@ -104,6 +104,16 @@ def _candidate_project_dirs(root: Path, work_dir: Path) -> list[Path]:
         seen.add(key)
         out.append(root / key)
     return out
+
+
+def _infer_work_dir_from_session_file(session_file: Path) -> Path:
+    try:
+        parent = Path(session_file).parent
+    except Exception:
+        return Path.cwd()
+    if parent.name in (".ccb", ".ccb_config"):
+        return parent.parent
+    return parent
 
 
 def _extract_content_text(content: Any) -> Optional[str]:
@@ -835,6 +845,31 @@ class ClaudeCommunicator:
                 data = {}
             if not isinstance(data, dict):
                 data = {}
+            work_dir_path: Path
+            raw_work_dir = data.get("work_dir")
+            work_dir = raw_work_dir.strip() if isinstance(raw_work_dir, str) else ""
+            if not work_dir:
+                raw_hint = self.session_info.get("work_dir")
+                work_dir = raw_hint.strip() if isinstance(raw_hint, str) else ""
+            if work_dir:
+                try:
+                    work_dir_path = Path(work_dir)
+                except Exception:
+                    work_dir_path = _infer_work_dir_from_session_file(path)
+            else:
+                work_dir_path = _infer_work_dir_from_session_file(path)
+            work_dir_str = str(work_dir_path)
+            data["work_dir"] = work_dir_str
+            if not str(data.get("work_dir_norm") or "").strip():
+                try:
+                    data["work_dir_norm"] = normalize_work_dir(work_dir_str)
+                except Exception:
+                    data["work_dir_norm"] = work_dir_str
+            if not str(data.get("ccb_project_id") or "").strip():
+                try:
+                    data["ccb_project_id"] = compute_ccb_project_id(work_dir_path)
+                except Exception:
+                    pass
             old_path = str(data.get("claude_session_path") or "").strip()
             old_id = str(data.get("claude_session_id") or "").strip()
             data["claude_session_path"] = str(session_path)
@@ -851,6 +886,8 @@ class ClaudeCommunicator:
             data["active"] = True
             payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
             safe_write_session(path, payload)
+            self.session_info["work_dir"] = work_dir_str
+            self.session_info["work_dir_norm"] = str(data.get("work_dir_norm") or "")
             self.session_info["claude_session_path"] = str(session_path)
             if session_path.stem and self.session_info.get("claude_session_id") != session_path.stem:
                 self.session_info["claude_session_id"] = session_path.stem

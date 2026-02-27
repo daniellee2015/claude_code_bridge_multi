@@ -1,17 +1,17 @@
 <div align="center">
 
-# Claude Code Bridge (ccb) v5.2.5
+# Claude Code Bridge (ccb) v5.2.6
 
-**基于终端分屏的全新多模型交互协作工具**
-**Claude & Codex & Gemini & OpenCode & Droid**
-**超低token时时通讯，发挥cli全部功能**
+**终端分屏多模型协作工具**
+**Claude · Codex · Gemini · OpenCode · Droid**
+**轻量异步通讯，交互皆可见，模型皆可控**
 
 <p>
   <img src="https://img.shields.io/badge/交互皆可见-096DD9?style=for-the-badge" alt="交互皆可见">
   <img src="https://img.shields.io/badge/模型皆可控-CF1322?style=for-the-badge" alt="模型皆可控">
 </p>
 
-[![Version](https://img.shields.io/badge/version-5.2.5-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-5.2.6-orange.svg)]()
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
 
 [English](README.md) | **中文**
@@ -33,7 +33,7 @@
 
 --- 
 
-**简介：** 多模型协作能够有效避免模型偏见、认知漏洞和上下文限制，然而 MCP、Skills 等直接调用 API 方式存在诸多局限性可不可控性。本项目打造了一套全新的可见即可得方案。
+**简介：** 多模型协作能有效避免模型偏见、认知盲区和上下文限制。不同于 MCP 或 API 调用方式，ccb 提供终端分屏所见即所得体验——交互皆可见，模型皆可控。
 
 ## ⚡ 核心优势
 
@@ -51,6 +51,27 @@
 <h2 align="center">🚀 新版本速览</h2>
 
 <details open>
+<summary><b>v5.2.6</b> - 异步通信修复 & Gemini 0.29 兼容</summary>
+
+**🔧 Gemini CLI 0.29.0 适配：**
+- **双哈希策略**：会话路径发现同时支持 basename 和 SHA-256 格式
+- **自动启动**：`ccb-ping` 和 `ccb-mounted` 新增 `--autostart` 标志，可自动拉起离线 provider
+- **清理工具**：新增 `ccb-cleanup`，清理僵尸守护进程和过期状态文件
+
+**🔗 异步通信修复：**
+- **OpenCode 死锁**：修复会话 ID 固定导致第二次异步调用必定失败的问题
+- **降级完成检测**：适配器在 req_id 不完全匹配时仍可识别 `CCB_DONE`
+- **req_id 正则**：`opencode_comm.py` 同时匹配旧 hex 和新时间戳格式
+- **Gemini 空闲超时**：Gemini 漏写 `CCB_DONE` 时自动检测回复完成（默认 15s，可通过 `CCB_GEMINI_IDLE_TIMEOUT` 调整）
+- **Gemini Prompt 加固**：强化指令格式，降低 `CCB_DONE` 遗漏率
+
+**🛠 其他修复：**
+- **lpend**：registry 过期时优先使用更新鲜的 Claude 会话路径
+- **mail setup**：修复 config v3 下 `ccb mail setup` 导入失败
+
+</details>
+
+<details>
 <summary><b>v5.2.5</b> - 异步护栏加固</summary>
 
 **🔧 异步轮次停止修复：**

@@ -11,7 +11,7 @@ from typing import Optional, Tuple
 from ccb_config import apply_backend_env
 from claude_session_resolver import resolve_claude_session
 from env_utils import env_bool, env_int
-from project_id import compute_ccb_project_id
+from project_id import compute_ccb_project_id, normalize_work_dir
 from session_utils import safe_write_session
 from terminal import get_backend_for_session
 
@@ -83,6 +83,42 @@ def _maybe_auto_extract_old_session(old_session_path: str, work_dir: Path) -> No
 
 def _now_str() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _infer_work_dir_from_session_file(session_file: Path) -> Path:
+    try:
+        parent = Path(session_file).parent
+    except Exception:
+        return Path.cwd()
+    if parent.name in (".ccb", ".ccb_config"):
+        return parent.parent
+    return parent
+
+
+def _ensure_work_dir_fields(data: dict, *, session_file: Path, fallback_work_dir: Optional[Path] = None) -> None:
+    if not isinstance(data, dict):
+        return
+
+    work_dir_raw = data.get("work_dir")
+    work_dir = work_dir_raw.strip() if isinstance(work_dir_raw, str) else ""
+    if not work_dir:
+        base = fallback_work_dir or _infer_work_dir_from_session_file(session_file)
+        work_dir = str(base)
+        data["work_dir"] = work_dir
+
+    work_dir_norm_raw = data.get("work_dir_norm")
+    work_dir_norm = work_dir_norm_raw.strip() if isinstance(work_dir_norm_raw, str) else ""
+    if not work_dir_norm:
+        try:
+            data["work_dir_norm"] = normalize_work_dir(work_dir)
+        except Exception:
+            data["work_dir_norm"] = work_dir
+
+    if not str(data.get("ccb_project_id") or "").strip():
+        try:
+            data["ccb_project_id"] = compute_ccb_project_id(Path(work_dir))
+        except Exception:
+            pass
 
 
 @dataclass
@@ -194,6 +230,7 @@ class ClaudeProjectSession:
                 _maybe_auto_extract_old_session(old_path, Path(self.work_dir))
 
     def _write_back(self) -> None:
+        _ensure_work_dir_fields(self.data, session_file=self.session_file)
         payload = json.dumps(self.data, ensure_ascii=False, indent=2) + "\n"
         ok, _err = safe_write_session(self.session_file, payload)
         if not ok:
@@ -223,6 +260,7 @@ def load_project_session(work_dir: Path) -> Optional[ClaudeProjectSession]:
             session_file = None
     if not session_file:
         return None
+    _ensure_work_dir_fields(data, session_file=session_file, fallback_work_dir=work_dir)
     return ClaudeProjectSession(session_file=session_file, data=data)
 
 
